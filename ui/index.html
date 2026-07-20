@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Monitor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" id="live-dot"></span>
+      <span class="brand-title" id="brand-title">SYSTEM MONITOR</span>
+      <span class="brand-sub">// LIVE STATUS</span>
+    </div>
+    <div class="topbar-right">
+      <span id="clock" class="clock"></span>
+      <span id="conn-state" class="conn-state">CONNECTING…</span>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <div id="hero" class="hero hidden"></div>
+
+  <main id="machines" class="machines">
+    <div class="waiting" id="waiting">Waiting for first agent report…</div>
+  </main>
+
+  <section class="events-panel">
+    <div class="panel-title">EVENT FEED</div>
+    <div id="events" class="events"></div>
+  </section>
+
+  <footer class="footer" id="brand-footer">INFRASTRUCTURE MONITOR</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# GreenHouse Monitor — COMPANION AGENT example configuration.
+#
+# Copy this whole folder to the remote machine, rename this file to
+# monitors.yml, edit the values below, then run start-agent.bat.
+# The agent collects data locally and reports to the master dashboard,
+# buffering while the master is unreachable.
+
+machine: ""                             # display name; blank = hostname
+mode: agent
+interval: 15
+
+master_url: http://MASTER-IP:8090       # the master machine's address
+api_key: greenhouse-change-me           # must match the master's api_key
+
+system:
+  disks: ["C:\\"]
+
+components: []
+
+# Add components exactly as in the master's monitors.yml — see the probe
+# reference there. Anything defined here appears on the master dashboard
+# under this machine's name.

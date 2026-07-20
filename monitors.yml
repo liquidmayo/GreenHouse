@@ -1,0 +1,90 @@
+# GreenHouse Monitor — blank master configuration.
+# mode: master runs the web dashboard AND collects local data in one process.
+# Fill in the components section for whatever runs on this machine.
+
+brand: "SYSTEM MONITOR"        # dashboard title text
+machine: ""                    # display name; blank = this computer's hostname
+mode: master
+interval: 15                   # seconds between collection cycles
+
+api_key: greenhouse-change-me  # shared secret; must match companion agents
+
+server:
+  host: 0.0.0.0
+  port: 8090
+
+system:
+  disks: ["C:\\"]              # drives to watch
+  disk_warn_pct: 85
+  disk_crit_pct: 95
+
+# ----------------------------------------------------------------------
+# Components: each one becomes a card on the dashboard. A component is a
+# list of probes; its status is the worst status any probe reports.
+# Add `featured: [metric_key]` to spotlight a metric in the hero strip.
+#
+# Probe reference (all fields shown; most are optional):
+#
+#   - type: process              # is a process running?
+#     match: myapp.exe           # substring match on process name
+#     cmdline_contains: text     # optional extra match on command line
+#     level_if_down: crit
+#
+#   - type: port                 # is a TCP port accepting connections?
+#     host: 127.0.0.1
+#     port: 8080
+#     level_if_down: crit
+#
+#   - type: http_json            # poll a JSON endpoint
+#     url: http://127.0.0.1:8080/api/health
+#     method: GET                # or POST (add json: {...} for a body)
+#     basic_auth: [user, pass]   # optional
+#     level_if_down: crit
+#     collect: [uptime, stats.count]     # dotted paths -> metric chips
+#     rates: [total_requests]            # counters -> <name>_per_min
+#     checks:
+#       - path: db_ok            # dotted path into the response
+#         equals: true           # or min: N / max: N / max_age: seconds
+#         level: crit            # status if the check fails
+#         label: "Database down"
+#
+#   - type: logtail              # tail a log file for patterns
+#     path: "C:\\path\\to\\app.log"
+#     patterns:
+#       - regex: "ERROR|FATAL"
+#         level: warn
+#         label: "Errors in log"
+#     heartbeat:                 # optional: alert when a line stops appearing
+#       regex: "heartbeat|tick"
+#       max_silence: 300
+#       level: warn
+#       label: "Heartbeat silent"
+#
+#   - type: file_activity        # alert when a file stops being written
+#     path: "C:\\path\\to\\data.db"    # or a glob: "C:\\logs\\*.log"
+#     max_age: 900
+#     level: warn
+#     label: "No recent writes"
+#
+#   - type: rdio_admin           # rdio-scanner admin API (listeners, ingest)
+#     url: http://127.0.0.1:3000
+#     password: ""               # rdio-scanner admin password
+#     max_call_silence: 900
+# ----------------------------------------------------------------------
+
+components: []
+
+# Example:
+#
+# components:
+#   - id: my-service
+#     label: "My Service"
+#     featured: [active_users]
+#     probes:
+#       - type: process
+#         match: myservice.exe
+#       - type: port
+#         port: 8080
+#       - type: http_json
+#         url: http://127.0.0.1:8080/api/status
+#         collect: [active_users, version]
