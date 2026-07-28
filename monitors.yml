@@ -8,6 +8,9 @@ mode: master
 interval: 15                   # seconds between collection cycles
 
 api_key: greenhouse-change-me  # shared secret; must match companion agents
+dashboard_password: ""         # set to require a login for the dashboard UI
+                               # (agents are unaffected; required if exposed
+                               # beyond a trusted LAN)
 
 server:
   host: 0.0.0.0

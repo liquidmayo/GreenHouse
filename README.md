@@ -44,5 +44,7 @@ One codebase, two roles:
   hero strip at the top of the dashboard and enlarges it on the card.
 - `brand:` in `monitors.yml` sets the dashboard title text.
 - History is kept in `data\monitor.db` (48h samples, 7d events, auto-pruned).
-- The dashboard has no login and the ingest API is protected only by the
-  shared `api_key` — keep it on a trusted LAN; change the default key.
+- The ingest API is protected by the shared `api_key`; change the default.
+  The dashboard UI is open by default — set `dashboard_password:` in
+  `monitors.yml` to require a login (do this before exposing it beyond a
+  trusted LAN, e.g. through a tunnel or reverse proxy).

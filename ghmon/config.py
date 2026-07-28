@@ -10,6 +10,7 @@ DEFAULTS = {
     "interval": 15,           # seconds between collection cycles
     "master_url": "http://localhost:8090",
     "api_key": "greenhouse-change-me",
+    "dashboard_password": "",   # blank = open dashboard; set to require login
     "server": {
         "host": "0.0.0.0",
         "port": 8090,

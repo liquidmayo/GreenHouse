@@ -43,7 +43,8 @@ def main():
         agent.start_background()
 
         server_cfg = cfg["server"]
-        app = create_app(store, cfg["api_key"], cfg.get("brand", "SYSTEM MONITOR"))
+        app = create_app(store, cfg["api_key"], cfg.get("brand", "SYSTEM MONITOR"),
+                         cfg.get("dashboard_password", ""))
         log.info("GreenHouse Monitor master dashboard at http://%s:%s/",
                  server_cfg["host"], server_cfg["port"])
         app.run(host=server_cfg["host"], port=server_cfg["port"],
