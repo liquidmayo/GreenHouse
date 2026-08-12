@@ -56,7 +56,8 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
     def gate():
         if not dashboard_password:
             return None
-        if request.path in ("/api/ingest", "/login"):
+        # /api/ingest and /api/ticker carry their own API-key auth
+        if request.path in ("/api/ingest", "/api/ticker", "/login"):
             return None
         if authed():
             return None
@@ -91,6 +92,29 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
             return jsonify({"ok": False, "error": "bad payload"}), 400
         store.ingest(payload)
         return jsonify({"ok": True})
+
+    @app.get("/api/ticker")
+    def ticker():
+        """Compact listener-count feed for embedded displays (T-Display etc.)."""
+        supplied = request.headers.get("X-API-Key") or request.args.get("key") or ""
+        if not secrets.compare_digest(supplied, api_key):
+            return jsonify({"ok": False, "error": "bad api key"}), 401
+        data = store.state()
+        rdio = None
+        thinline = None
+        worst = "ok"
+        sev = {"ok": 0, "unknown": 0, "warn": 1, "crit": 2}
+        for machine in data.get("machines", {}).values():
+            for comp in machine.get("components", []):
+                metrics = comp.get("metrics", {})
+                if isinstance(metrics.get("listeners"), (int, float)):
+                    rdio = (rdio or 0) + metrics["listeners"]
+                if isinstance(metrics.get("listener_count"), (int, float)):
+                    thinline = (thinline or 0) + metrics["listener_count"]
+                if sev.get(comp.get("status"), 0) > sev[worst]:
+                    worst = comp.get("status")
+        return jsonify({"rdio": rdio, "thinline": thinline,
+                        "status": worst, "ts": data["ts"]})
 
     @app.get("/api/state")
     def state():
