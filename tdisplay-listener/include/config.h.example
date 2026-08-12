@@ -1,0 +1,20 @@
+// HGA Listener Counter — device configuration.
+// Copy this file to config.h (same folder) and fill in your values.
+// config.h is git-ignored so credentials never leave this machine.
+#pragma once
+
+// WiFi network the display connects to (2.4 GHz only — ESP32 has no 5 GHz)
+#define WIFI_SSID     "your-wifi-name"
+#define WIFI_PASS     "your-wifi-password"
+
+// The HGA Monitor master's ticker endpoint (LAN address, port 8090)
+#define TICKER_URL    "http://192.168.1.100:8090/api/ticker"
+
+// Must match api_key in the master's monitors.yml
+#define API_KEY       "hga-monitor-2026-change-me"
+
+// Seconds between polls
+#define POLL_SECONDS  10
+
+// Initial backlight brightness, 0-255 (button 1 / BOOT cycles levels)
+#define BRIGHTNESS    200
