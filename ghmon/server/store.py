@@ -15,6 +15,7 @@ log = logging.getLogger("ghmon.store")
 
 STRIP_LEN = 60          # status points kept per component for the uptime strip
 EVENTS_KEPT = 200       # recent events kept in memory for the feed
+CALLS_KEPT = 300        # recent radio calls kept in memory for the call feed
 SAMPLE_RETENTION_H = 48
 EVENT_RETENTION_H = 24 * 7
 
@@ -51,6 +52,7 @@ class Store:
             lambda: collections.deque(maxlen=STRIP_LEN))  # (machine, comp) -> deque
         self.recent_events = collections.deque(maxlen=EVENTS_KEPT)
         self._event_keys = collections.deque(maxlen=EVENTS_KEPT)
+        self.recent_calls = collections.deque(maxlen=CALLS_KEPT)
         self._last_prune = 0
         with self._conn() as conn:
             conn.executescript(SCHEMA)
@@ -112,6 +114,38 @@ class Store:
         except Exception:
             log.exception("prune failed")
 
+    def note_call(self, payload):
+        """Record one radio call pushed by the SDRTrunk webhook broadcaster."""
+        now = time.time()
+        ts = payload.get("timestampSeconds")
+        if not isinstance(ts, (int, float)) or ts <= 0:
+            ts = now
+        call = {
+            "ts": ts,
+            "system": payload.get("systemLabel") or payload.get("system") or "",
+            "talkgroup": payload.get("talkgroupLabel")
+                         or str(payload.get("talkgroup") or ""),
+            "radio": payload.get("talkerAlias")
+                     or str(payload.get("radioId") or ""),
+            "duration_s": payload.get("durationSeconds"),
+            "frequency": payload.get("frequency"),
+        }
+        with self.lock:
+            self.recent_calls.appendleft(call)
+
+    def call_stats(self):
+        now = time.time()
+        with self.lock:
+            calls = list(self.recent_calls)
+        last_min = sum(1 for c in calls if now - c["ts"] <= 60)
+        last_hour = sum(1 for c in calls if now - c["ts"] <= 3600)
+        return {
+            "last_min": last_min,
+            "last_hour": last_hour,
+            "last_call_age_s": round(now - calls[0]["ts"]) if calls else None,
+            "recent": calls[:15],
+        }
+
     def state(self):
         now = time.time()
         machines = {}
@@ -140,7 +174,8 @@ class Store:
                 "components": comps,
             }
         return {"ts": now, "machines": machines,
-                "events": list(self.recent_events)[:60]}
+                "events": list(self.recent_events)[:60],
+                "calls": self.call_stats()}
 
     def history(self, machine, component, hours=6):
         since = time.time() - hours * 3600

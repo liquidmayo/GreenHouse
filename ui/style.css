@@ -266,6 +266,14 @@ body {
   border-bottom: 1px solid var(--card-border);
 }
 
+.panel-note { color: var(--muted); font-weight: 400; margin-left: 10px; }
+
+.call-tg { color: var(--text); font-weight: 600; flex: none; min-width: 180px;
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-sys { color: var(--green); flex: none; min-width: 130px;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-dur { color: var(--dim); flex: none; }
+
 .events { max-height: 260px; overflow-y: auto; font-family: Consolas, monospace; font-size: 12px; }
 
 .event-row {

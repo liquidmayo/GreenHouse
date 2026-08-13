@@ -56,8 +56,9 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
     def gate():
         if not dashboard_password:
             return None
-        # /api/ingest and /api/ticker carry their own API-key auth
-        if request.path in ("/api/ingest", "/api/ticker", "/login"):
+        # these carry their own API-key auth
+        if request.path in ("/api/ingest", "/api/ticker",
+                            "/api/webhook/sdrtrunk", "/login"):
             return None
         if authed():
             return None
@@ -93,6 +94,21 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
         store.ingest(payload)
         return jsonify({"ok": True})
 
+    @app.post("/api/webhook/sdrtrunk")
+    def sdrtrunk_webhook():
+        """Per-call push from SDRTrunk's Local Webhook (JSON) broadcaster.
+        The stream's Authorization field should be set to the shared api_key."""
+        supplied = (request.headers.get("Authorization")
+                    or request.headers.get("X-API-Key")
+                    or request.args.get("key") or "")
+        if not secrets.compare_digest(supplied, api_key):
+            return jsonify({"ok": False, "error": "bad authorization"}), 401
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"ok": False, "error": "bad payload"}), 400
+        store.note_call(payload)
+        return jsonify({"ok": True})
+
     @app.get("/api/ticker")
     def ticker():
         """Compact listener-count feed for embedded displays (T-Display etc.)."""
@@ -113,8 +129,15 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
                     thinline = (thinline or 0) + metrics["listener_count"]
                 if sev.get(comp.get("status"), 0) > sev[worst]:
                     worst = comp.get("status")
+        stats = store.call_stats()
+        last = stats["recent"][0] if stats["recent"] else None
+        last_call = None
+        if last:
+            last_call = {"talkgroup": last["talkgroup"], "system": last["system"],
+                         "age_s": round(data["ts"] - last["ts"])}
         return jsonify({"rdio": rdio, "thinline": thinline,
-                        "status": worst, "ts": data["ts"]})
+                        "status": worst, "ts": data["ts"],
+                        "calls_min": stats["last_min"], "last_call": last_call})
 
     @app.get("/api/state")
     def state():

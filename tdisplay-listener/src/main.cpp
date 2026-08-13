@@ -40,10 +40,13 @@ bool useSprite = false;
 // live values (-1 = unknown / not yet received)
 int rdioCount = -1;
 int thinlineCount = -1;
+int callsMin = -1;
+char lastCallTg[48] = "";         // last call talkgroup label
+int lastCallAge = -1;             // seconds, as of lastOkPoll
 char sysStatus[8] = "unk";        // ok | warn | crit
 unsigned long lastOkPoll = 0;     // millis() of last successful poll
 unsigned long lastPollAttempt = 0;
-int viewMode = 0;                 // 0 split, 1 rdio zoom, 2 thinline zoom
+int viewMode = 0;                 // 0 split, 1 rdio zoom, 2 thinline zoom, 3 calls
 
 const uint8_t brightLevels[] = {60, 120, 200, 255};
 int brightIdx = 2;
@@ -112,30 +115,68 @@ void drawStaleBar(TFT_eSprite &g) {
   g.drawString(buf, SCREEN_W / 2, SCREEN_H - 2, 2);
 }
 
+void fmtAgeShort(char *out, size_t n, int seconds) {
+  if (seconds < 0) { out[0] = 0; return; }
+  if (seconds < 120) snprintf(out, n, "%ds", seconds);
+  else if (seconds < 5400) snprintf(out, n, "%dm", seconds / 60);
+  else snprintf(out, n, "%dh", seconds / 3600);
+}
+
+// bottom strip: call rate + most recent call talkgroup
+void drawCallStrip(TFT_eSprite &g) {
+  if (callsMin < 0) return;
+  char age[12] = "";
+  if (lastCallAge >= 0 && lastOkPoll > 0) {
+    fmtAgeShort(age, sizeof(age),
+                lastCallAge + (int)((millis() - lastOkPoll) / 1000));
+  }
+  char buf[96];
+  if (lastCallTg[0]) {
+    snprintf(buf, sizeof(buf), "CALLS %d/min   %s %s", callsMin, lastCallTg, age);
+  } else {
+    snprintf(buf, sizeof(buf), "CALLS %d/min", callsMin);
+  }
+  g.setTextDatum(BC_DATUM);
+  g.setTextColor(C_MUTED, C_BG);
+  g.drawString(buf, SCREEN_W / 2, SCREEN_H - 2, 2);
+}
+
 void drawMain(TFT_eSprite &g) {
   g.fillSprite(C_BG);
   drawTopBar(g);
 
   if (viewMode == 0) {
     // split view: rdio left, thinline right
-    g.drawFastVLine(SCREEN_W / 2, 30, SCREEN_H - 55, C_GREENDK);
-    drawCount(g, rdioCount, SCREEN_W / 4, 88, false);
-    drawCount(g, thinlineCount, 3 * SCREEN_W / 4, 88, false);
+    g.drawFastVLine(SCREEN_W / 2, 28, SCREEN_H - 62, C_GREENDK);
+    drawCount(g, rdioCount, SCREEN_W / 4, 78, false);
+    drawCount(g, thinlineCount, 3 * SCREEN_W / 4, 78, false);
     g.setTextDatum(BC_DATUM);
     g.setTextColor(C_MUTED, C_BG);
-    g.drawString("RDIO", SCREEN_W / 4, SCREEN_H - 18, 2);
-    g.drawString("THINLINE", 3 * SCREEN_W / 4, SCREEN_H - 18, 2);
+    g.drawString("RDIO", SCREEN_W / 4, SCREEN_H - 26, 2);
+    g.drawString("THINLINE", 3 * SCREEN_W / 4, SCREEN_H - 26, 2);
+  } else if (viewMode == 3) {
+    // calls zoom: rate huge, last talkgroup beneath
+    drawCount(g, callsMin, SCREEN_W / 2, 74, true);
+    g.setTextDatum(BC_DATUM);
+    g.setTextColor(C_MUTED, C_BG);
+    g.drawString("CALLS / MIN", SCREEN_W / 2, SCREEN_H - 40, 2);
+    if (lastCallTg[0]) {
+      g.setTextColor(C_GREEN, C_BG);
+      g.drawString(lastCallTg, SCREEN_W / 2, SCREEN_H - 20, 2);
+    }
   } else {
     int v = (viewMode == 1) ? rdioCount : thinlineCount;
     const char *label = (viewMode == 1) ? "RDIO LISTENERS" : "THINLINE LISTENERS";
-    drawCount(g, v, SCREEN_W / 2, 88, true);
+    drawCount(g, v, SCREEN_W / 2, 78, true);
     g.setTextDatum(BC_DATUM);
     g.setTextColor(C_MUTED, C_BG);
-    g.drawString(label, SCREEN_W / 2, SCREEN_H - 18, 2);
+    g.drawString(label, SCREEN_W / 2, SCREEN_H - 26, 2);
   }
 
   if (lastOkPoll == 0 || millis() - lastOkPoll > STALE_MS) {
     drawStaleBar(g);
+  } else if (viewMode != 3) {
+    drawCallStrip(g);
   }
   g.pushSprite(0, 0);
 }
@@ -184,17 +225,27 @@ bool pollTicker() {
     filter["rdio"] = true;
     filter["thinline"] = true;
     filter["status"] = true;
+    filter["calls_min"] = true;
+    filter["last_call"] = true;
     JsonDocument doc;
     DeserializationError err = deserializeJson(
         doc, http.getStream(), DeserializationOption::Filter(filter));
     if (!err) {
       rdioCount = doc["rdio"].isNull() ? -1 : doc["rdio"].as<int>();
       thinlineCount = doc["thinline"].isNull() ? -1 : doc["thinline"].as<int>();
+      callsMin = doc["calls_min"].isNull() ? -1 : doc["calls_min"].as<int>();
+      if (doc["last_call"].is<JsonObject>()) {
+        strlcpy(lastCallTg, doc["last_call"]["talkgroup"] | "", sizeof(lastCallTg));
+        lastCallAge = doc["last_call"]["age_s"] | -1;
+      } else {
+        lastCallTg[0] = 0;
+        lastCallAge = -1;
+      }
       strlcpy(sysStatus, doc["status"] | "unk", sizeof(sysStatus));
       lastOkPoll = millis();
       ok = true;
-      Serial.printf("ticker: rdio=%d thinline=%d status=%s\n",
-                    rdioCount, thinlineCount, sysStatus);
+      Serial.printf("ticker: rdio=%d thinline=%d calls=%d status=%s\n",
+                    rdioCount, thinlineCount, callsMin, sysStatus);
     } else {
       Serial.printf("json error: %s\n", err.c_str());
     }
@@ -255,7 +306,7 @@ void loop() {
     setBrightness(brightLevels[brightIdx]);
   }
   if (pressed(PIN_BTN_VIEW)) {
-    viewMode = (viewMode + 1) % 3;
+    viewMode = (viewMode + 1) % 4;
     drawMain(spr);
   }
 
