@@ -33,7 +33,7 @@ One codebase, two roles:
 |---|---|
 | `process` | Process running (name and/or command-line match), memory usage |
 | `port` | TCP port accepting connections, latency |
-| `http_json` | Poll a JSON endpoint; `checks` (equals/min/max/max_age), `collect` metrics, `rates` for counters |
+| `http_json` | Poll a JSON endpoint; `checks` (equals/min/max/max_age), `collect` metrics, `rates` for counters, `alert_events` to surface a JSON alerts array |
 | `logtail` | Incremental log tail with regex patterns + heartbeat-silence detection; handles rotation |
 | `file_activity` | Alert when a file (or newest glob match) stops being written |
 | `rdio_admin` | rdio-scanner admin API: listener count, call-ingest rate, API errors |

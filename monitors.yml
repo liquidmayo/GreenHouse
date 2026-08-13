@@ -50,6 +50,11 @@ system:
 #         equals: true           # or min: N / max: N / max_age: seconds
 #         level: crit            # status if the check fails
 #         label: "Database down"
+#     alert_events:              # optional: map a JSON alerts array to events
+#       path: alerts             # array of {level, msg} objects
+#       level_key: level         # "error" -> warn (crit with crit_on_error: true)
+#       msg_key: msg
+#       label: "Service alert"
 #
 #   - type: logtail              # tail a log file for patterns
 #     path: "C:\\path\\to\\app.log"
@@ -91,3 +96,35 @@ components: []
 #       - type: http_json
 #         url: http://127.0.0.1:8080/api/status
 #         collect: [active_users, version]
+#
+# Example: SDRTrunk with the health endpoint (sdrtrunk-homegrown build).
+# Keep a process probe alongside it — the endpoint self-reports
+# online/degraded but a dead process reports nothing.
+#
+#   - id: sdrtrunk
+#     label: "SDRTrunk"
+#     probes:
+#       - type: process
+#         match: java.exe
+#         cmdline_contains: dsheirer
+#       - type: http_json
+#         url: http://127.0.0.1:8099/health
+#         timeout: 6
+#         level_if_down: warn
+#         collect: [metrics.active_channels, metrics.tuners_running,
+#                   metrics.tuner_count, metrics.heap_used_mb,
+#                   metrics.recordings_free_mb, uptime_s]
+#         checks:
+#           - path: status
+#             equals: "online"
+#             level: warn
+#             label: "SDRTrunk self-reports degraded"
+#           - path: generated
+#             max_age: 90
+#             level: warn
+#             label: "Health snapshot stale"
+#         alert_events:
+#           path: alerts
+#           level_key: level
+#           msg_key: msg
+#           label: "SDRTrunk alert"
