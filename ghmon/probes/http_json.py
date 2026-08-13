@@ -134,6 +134,28 @@ class HttpJsonProbe(Probe):
                 if _sev(level) > _sev(status):
                     status = level
 
+        # Optional: surface a JSON alerts array (e.g. SDRTrunk /health "alerts")
+        # as monitor events. Config:
+        #   alert_events: {path: alerts, level_key: level, msg_key: msg,
+        #                  label: "SDRTrunk alert", crit_on_error: false}
+        ae = cfg.get("alert_events")
+        if ae:
+            entries = dig(data, ae.get("path", "alerts"))
+            if isinstance(entries, list) and entries:
+                label = ae.get("label", "Alert")
+                for entry in entries[:10]:
+                    if isinstance(entry, dict):
+                        raw = str(entry.get(ae.get("level_key", "level"), "warn")).lower()
+                        msg = str(entry.get(ae.get("msg_key", "msg"), entry))
+                    else:
+                        raw, msg = "warn", str(entry)
+                    lvl = "crit" if raw in ("crit", "critical") or (
+                        raw == "error" and ae.get("crit_on_error")) else "warn"
+                    events.append(event(lvl, label, msg))
+                    if _sev(lvl) > _sev(status):
+                        status = lvl
+                summaries.append(f"{len(entries)} active alert(s)")
+
         return result(status, "; ".join(summaries), metrics, events)
 
 
