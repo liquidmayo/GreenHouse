@@ -43,6 +43,7 @@ function esc(s) {
 
 function featuredLabel(key) {
   if (key.toLowerCase().includes("listener")) return "LISTENERS";
+  if (key.toLowerCase().includes("viewer")) return "VIEWERS";
   return key.replace(/_/g, " ").toUpperCase();
 }
 
@@ -92,7 +93,9 @@ function renderMachine(name, m) {
     if (d.error) return `<span class="sysstat warn">${esc(d.mount)} <b>?</b></span>`;
     return `<span class="sysstat ${sysStatClass(d.used_pct)}">${esc(d.mount)} <b>${d.used_pct}%</b> (${d.free_gb} GB free)</span>`;
   }).join("");
-  const cards = (m.components || []).map(renderCard).join("");
+  const cards = (m.components || [])
+    .filter(c => !c.hero_only)
+    .map(renderCard).join("");
   return `
     <section class="machine">
       <div class="machine-head">

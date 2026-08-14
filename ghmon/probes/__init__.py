@@ -5,6 +5,7 @@ from .process_check import ProcessProbe
 from .logtail import LogTailProbe
 from .file_activity import FileActivityProbe
 from .rdio_admin import RdioAdminProbe
+from .youtube_live import YoutubeLiveProbe
 
 PROBE_TYPES = {
     "http_json": HttpJsonProbe,
@@ -13,6 +14,7 @@ PROBE_TYPES = {
     "logtail": LogTailProbe,
     "file_activity": FileActivityProbe,
     "rdio_admin": RdioAdminProbe,
+    "youtube_live": YoutubeLiveProbe,
 }
 
 

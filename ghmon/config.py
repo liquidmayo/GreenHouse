@@ -28,7 +28,14 @@ DEFAULTS = {
 
 def load_config(path):
     with open(path, "r", encoding="utf-8") as fh:
-        raw = yaml.safe_load(fh) or {}
+        try:
+            raw = yaml.safe_load(fh) or {}
+        except yaml.YAMLError as exc:
+            hint = ""
+            if "unknown escape character" in str(exc):
+                hint = ("\nHINT: a Windows path inside DOUBLE quotes treats \\ as an "
+                        "escape. Use single quotes for paths: path: 'C:\\my\\file.log'")
+            raise SystemExit(f"Config error in {path}:\n{exc}{hint}")
     cfg = dict(DEFAULTS)
     cfg.update(raw)
     for key in ("server", "system"):

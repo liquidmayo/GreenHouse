@@ -28,23 +28,36 @@ class Probe:
 
     Probe instances persist across collection cycles so they can keep state
     (log file positions, previous counter values, cached auth tokens).
+
+    Any probe may set `every: <seconds>` in its config to run at most that
+    often — between runs the last result is returned (useful for heavy or
+    rate-limited targets).
     """
 
     def __init__(self, cfg):
         self.cfg = cfg
+        self._last_run = 0.0
+        self._last_result = None
 
     def run(self):
         raise NotImplementedError
 
     def safe_run(self):
+        every = self.cfg.get("every")
+        now = time.time()
+        if every and self._last_result is not None and now - self._last_run < every:
+            return self._last_result
         try:
-            return self.run()
+            res = self.run()
         except Exception as exc:  # a broken probe must never kill the cycle
-            return result(
+            res = result(
                 "warn",
                 f"probe error: {exc}",
                 events=[event("warn", "Probe error", f"{self.cfg.get('type')}: {exc}")],
             )
+        self._last_run = now
+        self._last_result = res
+        return res
 
 
 def worst(statuses):

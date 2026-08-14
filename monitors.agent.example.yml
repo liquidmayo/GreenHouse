@@ -13,7 +13,7 @@ master_url: http://MASTER-IP:8090       # the master machine's address
 api_key: greenhouse-change-me           # must match the master's api_key
 
 system:
-  disks: ["C:\\"]
+  disks: ['C:\']
 
 components: []
 

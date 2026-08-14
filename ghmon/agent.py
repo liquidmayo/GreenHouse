@@ -24,6 +24,7 @@ class Component:
         self.label = cfg.get("label", cfg["id"])
         self.featured = cfg.get("featured", [])  # hero tiles + big card number
         self.featured_card = cfg.get("featured_card", [])  # big card number only
+        self.hero_only = bool(cfg.get("hero_only", False))  # hero tile, no card
         self.probes = [build_probe(p) for p in cfg.get("probes", [])]
 
     def collect(self):
@@ -48,6 +49,7 @@ class Component:
             "summary": summary,
             "featured": self.featured,
             "featured_card": self.featured_card,
+            "hero_only": self.hero_only,
             "metrics": metrics,
             "events": events,
         }

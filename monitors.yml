@@ -17,7 +17,7 @@ server:
   port: 8090
 
 system:
-  disks: ["C:\\"]              # drives to watch
+  disks: ['C:\']              # drives to watch
   disk_warn_pct: 85
   disk_crit_pct: 95
 
@@ -26,7 +26,8 @@ system:
 # list of probes; its status is the worst status any probe reports.
 # Add `featured: [metric_key]` to spotlight a metric in the hero strip
 # (and big on its card), or `featured_card: [metric_key]` for the big
-# card number without a hero tile.
+# card number without a hero tile. `hero_only: true` on a component
+# renders its hero tile(s) but no card in the machine grid.
 #
 # Probe reference (all fields shown; most are optional):
 #
@@ -59,7 +60,7 @@ system:
 #       label: "Service alert"
 #
 #   - type: logtail              # tail a log file for patterns
-#     path: "C:\\path\\to\\app.log"
+#     path: 'C:\path\to\app.log'
 #     patterns:
 #       - regex: "ERROR|FATAL"
 #         level: warn
@@ -71,7 +72,7 @@ system:
 #       label: "Heartbeat silent"
 #
 #   - type: file_activity        # alert when a file stops being written
-#     path: "C:\\path\\to\\data.db"    # or a glob: "C:\\logs\\*.log"
+#     path: 'C:\path\to\data.db'    # or a glob: 'C:\logs\*.log'
 #     max_age: 900
 #     level: warn
 #     label: "No recent writes"
@@ -80,6 +81,14 @@ system:
 #     url: http://127.0.0.1:3000
 #     password: ""               # rdio-scanner admin password
 #     max_call_silence: 900
+#
+#   - type: youtube_live         # YouTube livestream: live + watching-now
+#     video_id: dQw4w9WgXcQ      # or url: https://www.youtube.com/watch?v=...
+#     every: 60                  # watch page is ~1 MB; fetch at most 1/min
+#     offline_level: warn        # status when the stream is not live
+#
+# Any probe accepts `every: <seconds>` to run at most that often
+# (last result is reused between runs).
 # ----------------------------------------------------------------------
 
 components: []

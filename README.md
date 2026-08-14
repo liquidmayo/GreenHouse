@@ -37,6 +37,7 @@ One codebase, two roles:
 | `logtail` | Incremental log tail with regex patterns + heartbeat-silence detection; handles rotation |
 | `file_activity` | Alert when a file (or newest glob match) stops being written |
 | `rdio_admin` | rdio-scanner admin API: listener count, call-ingest rate, API errors |
+| `youtube_live` | YouTube livestream: live/offline + watching-now count (no API key) |
 
 ## Notes
 
