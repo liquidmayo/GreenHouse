@@ -118,6 +118,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
         data = store.state()
         rdio = None
         thinline = None
+        followers = None
         worst = "ok"
         sev = {"ok": 0, "unknown": 0, "warn": 1, "crit": 2}
         for machine in data.get("machines", {}).values():
@@ -127,6 +128,8 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
                     rdio = (rdio or 0) + metrics["listeners"]
                 if isinstance(metrics.get("listener_count"), (int, float)):
                     thinline = (thinline or 0) + metrics["listener_count"]
+                if isinstance(metrics.get("followers"), (int, float)):
+                    followers = (followers or 0) + metrics["followers"]
                 if sev.get(comp.get("status"), 0) > sev[worst]:
                     worst = comp.get("status")
         stats = store.call_stats()
@@ -136,6 +139,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
             last_call = {"talkgroup": last["talkgroup"], "system": last["system"],
                          "age_s": round(data["ts"] - last["ts"])}
         return jsonify({"rdio": rdio, "thinline": thinline,
+                        "followers": followers,
                         "status": worst, "ts": data["ts"],
                         "calls_min": stats["last_min"], "last_call": last_call})
 

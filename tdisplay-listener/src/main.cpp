@@ -41,12 +41,13 @@ bool useSprite = false;
 int rdioCount = -1;
 int thinlineCount = -1;
 int callsMin = -1;
+int followersTotal = -1;          // total FB followers across pages
 char lastCallTg[48] = "";         // last call talkgroup label
 int lastCallAge = -1;             // seconds, as of lastOkPoll
 char sysStatus[8] = "unk";        // ok | warn | crit
 unsigned long lastOkPoll = 0;     // millis() of last successful poll
 unsigned long lastPollAttempt = 0;
-int viewMode = 0;                 // 0 split, 1 rdio zoom, 2 thinline zoom, 3 calls
+int viewMode = 0;                 // 0 split, 1 rdio, 2 thinline, 3 calls, 4 followers
 
 const uint8_t brightLevels[] = {60, 120, 200, 255};
 int brightIdx = 2;
@@ -74,10 +75,11 @@ void drawCount(TFT_eSprite &g, int value, int cx, int cy, bool zoom) {
     return;
   }
   g.setTextColor(C_GREEN, C_BG);
-  int digits = (value >= 1000) ? 4 : (value >= 100) ? 3 : (value >= 10) ? 2 : 1;
+  int digits = 1;
+  for (int v = value; v >= 10; v /= 10) digits++;
   int font = 8;
   if (zoom) {
-    font = (digits <= 4) ? 8 : 7;
+    font = (digits <= 5) ? 8 : 7;   // FONT8 fits 5 digits across 320px
   } else {
     font = (digits <= 2) ? 8 : 7;   // half-screen cell fits 2 digits of FONT8
   }
@@ -164,6 +166,12 @@ void drawMain(TFT_eSprite &g) {
       g.setTextColor(C_GREEN, C_BG);
       g.drawString(lastCallTg, SCREEN_W / 2, SCREEN_H - 20, 2);
     }
+  } else if (viewMode == 4) {
+    // followers zoom: total across the HomeGrown Facebook pages
+    drawCount(g, followersTotal, SCREEN_W / 2, 78, true);
+    g.setTextDatum(BC_DATUM);
+    g.setTextColor(C_MUTED, C_BG);
+    g.drawString("FB FOLLOWERS", SCREEN_W / 2, SCREEN_H - 26, 2);
   } else {
     int v = (viewMode == 1) ? rdioCount : thinlineCount;
     const char *label = (viewMode == 1) ? "RDIO LISTENERS" : "THINLINE LISTENERS";
@@ -227,6 +235,7 @@ bool pollTicker() {
     filter["status"] = true;
     filter["calls_min"] = true;
     filter["last_call"] = true;
+    filter["followers"] = true;
     JsonDocument doc;
     DeserializationError err = deserializeJson(
         doc, http.getStream(), DeserializationOption::Filter(filter));
@@ -234,6 +243,7 @@ bool pollTicker() {
       rdioCount = doc["rdio"].isNull() ? -1 : doc["rdio"].as<int>();
       thinlineCount = doc["thinline"].isNull() ? -1 : doc["thinline"].as<int>();
       callsMin = doc["calls_min"].isNull() ? -1 : doc["calls_min"].as<int>();
+      followersTotal = doc["followers"].isNull() ? -1 : doc["followers"].as<int>();
       if (doc["last_call"].is<JsonObject>()) {
         strlcpy(lastCallTg, doc["last_call"]["talkgroup"] | "", sizeof(lastCallTg));
         lastCallAge = doc["last_call"]["age_s"] | -1;
@@ -306,7 +316,7 @@ void loop() {
     setBrightness(brightLevels[brightIdx]);
   }
   if (pressed(PIN_BTN_VIEW)) {
-    viewMode = (viewMode + 1) % 4;
+    viewMode = (viewMode + 1) % 5;
     drawMain(spr);
   }
 
