@@ -48,7 +48,7 @@ function featuredLabel(key) {
 
 function renderCard(comp) {
   const st = comp.status || "unknown";
-  const featuredKeys = comp.featured || [];
+  const featuredKeys = [...(comp.featured || []), ...(comp.featured_card || [])];
   let featuredRow = "";
   if (featuredKeys.length) {
     featuredRow = `<div class="card-featured">` + featuredKeys.map(k => {

@@ -22,7 +22,8 @@ class Component:
     def __init__(self, cfg):
         self.id = cfg["id"]
         self.label = cfg.get("label", cfg["id"])
-        self.featured = cfg.get("featured", [])  # metric keys to spotlight in the UI
+        self.featured = cfg.get("featured", [])  # hero tiles + big card number
+        self.featured_card = cfg.get("featured_card", [])  # big card number only
         self.probes = [build_probe(p) for p in cfg.get("probes", [])]
 
     def collect(self):
@@ -46,6 +47,7 @@ class Component:
             "status": status,
             "summary": summary,
             "featured": self.featured,
+            "featured_card": self.featured_card,
             "metrics": metrics,
             "events": events,
         }

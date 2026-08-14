@@ -24,7 +24,9 @@ system:
 # ----------------------------------------------------------------------
 # Components: each one becomes a card on the dashboard. A component is a
 # list of probes; its status is the worst status any probe reports.
-# Add `featured: [metric_key]` to spotlight a metric in the hero strip.
+# Add `featured: [metric_key]` to spotlight a metric in the hero strip
+# (and big on its card), or `featured_card: [metric_key]` for the big
+# card number without a hero tile.
 #
 # Probe reference (all fields shown; most are optional):
 #
