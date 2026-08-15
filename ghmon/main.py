@@ -22,11 +22,23 @@ def main():
     parser.add_argument("--config", default="monitors.yml", help="path to monitors.yml")
     parser.add_argument("--mode", choices=["master", "agent"],
                         help="override mode from config")
+    parser.add_argument("--log", default=None,
+                        help="also write log output to this file (rotating, 2 MB x 3); "
+                             "required for useful diagnostics when run windowless via pythonw")
     args = parser.parse_args()
 
+    handlers = []
+    if sys.stderr is not None:  # pythonw has no console streams
+        handlers.append(logging.StreamHandler())
+    if args.log:
+        from logging.handlers import RotatingFileHandler
+        os.makedirs(os.path.dirname(os.path.abspath(args.log)), exist_ok=True)
+        handlers.append(RotatingFileHandler(args.log, maxBytes=2_000_000,
+                                            backupCount=3, encoding="utf-8"))
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        handlers=handlers or [logging.NullHandler()])
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     log = logging.getLogger("ghmon")
 

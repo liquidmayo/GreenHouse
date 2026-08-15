@@ -17,7 +17,9 @@ One codebase, two roles:
 1. Edit `monitors.yml` — add a component per service you want watched
    (the file contains a full probe reference and an example).
 2. Run `start.bat` (requires Python 3.10+; a virtualenv is created on
-   first run).
+   first run). It runs windowless in the background and logs to
+   `data\monitor.log`; `stop.bat` stops it. Use `start-console.bat`
+   instead if you want a console window with live output.
 3. Open <http://localhost:8090/>.
 
 ## Deploying a companion agent to another machine
