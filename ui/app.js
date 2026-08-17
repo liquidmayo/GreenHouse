@@ -361,7 +361,6 @@ async function refresh() {
     renderBanner(machines);
     renderHero(machines);
     renderCalls(data.calls);
-    renderEvents(data.events);
   } catch (err) {
     failures++;
     if (failures >= 2) {
