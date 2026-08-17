@@ -16,6 +16,20 @@ server:
   host: 0.0.0.0
   port: 8090
 
+# Alerts pushed when a component goes CRIT (and when it recovers) or a
+# remote agent goes offline. Paste a Discord webhook URL to enable
+# (Server Settings -> Integrations -> Webhooks -> New Webhook -> Copy URL),
+# and/or a generic `webhook:` URL that receives a JSON POST.
+# Test with:  .venv\Scripts\python.exe -m ghmon.main --test-notify
+notify:
+  discord_webhook: ""
+  webhook: ""
+  min_severity: crit          # crit | warn
+  confirm_seconds: 45         # bad state must persist this long first
+  offline_grace_seconds: 300  # remote agent silent this long -> offline alert
+  cooldown_minutes: 15        # min gap between repeat alerts for one problem
+  startup_grace_seconds: 90   # no alerts right after a dashboard restart
+
 system:
   disks: ['C:\']              # drives to watch
   disk_warn_pct: 85

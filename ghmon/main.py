@@ -25,6 +25,8 @@ def main():
     parser.add_argument("--log", default=None,
                         help="also write log output to this file (rotating, 2 MB x 3); "
                              "required for useful diagnostics when run windowless via pythonw")
+    parser.add_argument("--test-notify", action="store_true",
+                        help="send a test notification on the configured channels and exit")
     args = parser.parse_args()
 
     handlers = []
@@ -47,20 +49,38 @@ def main():
 
     if mode == "master":
         from ghmon.server.app import create_app
+        from ghmon.server.notify import Notifier
         from ghmon.server.store import Store
 
         base_dir = os.path.dirname(os.path.abspath(args.config))
         store = Store(os.path.join(base_dir, "data", "monitor.db"))
+        notifier = Notifier(cfg.get("notify"), store)
+
+        if args.test_notify:
+            if not notifier.enabled:
+                raise SystemExit("no notify channels configured in monitors.yml")
+            notifier.test()
+            print("test notification sent — check the channel")
+            return
+
         agent = Agent(cfg, LocalSink(store))
         agent.start_background()
+        notifier.start_background()
 
         server_cfg = cfg["server"]
         app = create_app(store, cfg["api_key"], cfg.get("brand", "SYSTEM MONITOR"),
                          cfg.get("dashboard_password", ""))
         log.info("GreenHouse Monitor master dashboard at http://%s:%s/",
                  server_cfg["host"], server_cfg["port"])
-        app.run(host=server_cfg["host"], port=server_cfg["port"],
-                debug=False, threaded=True, use_reloader=False)
+        try:
+            from waitress import serve
+            serve(app, host=server_cfg["host"], port=server_cfg["port"],
+                  threads=8, ident="greenhouse-monitor")
+        except ImportError:
+            log.warning("waitress not installed; falling back to Flask dev server "
+                        "(pip install waitress)")
+            app.run(host=server_cfg["host"], port=server_cfg["port"],
+                    debug=False, threaded=True, use_reloader=False)
     else:
         log.info("companion agent mode -> %s", cfg["master_url"])
         agent = Agent(cfg, HttpSink(cfg["master_url"], cfg["api_key"]))

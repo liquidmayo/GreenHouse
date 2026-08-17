@@ -41,6 +41,16 @@ One codebase, two roles:
 | `rdio_admin` | rdio-scanner admin API: listener count, call-ingest rate, API errors |
 | `youtube_live` | YouTube livestream: live/offline + watching-now count (no API key) |
 
+## Alerts
+
+Set `notify.discord_webhook` (and/or a generic `notify.webhook`) in
+`monitors.yml` and the master pushes a message when a component goes CRIT,
+when it recovers, and when a remote agent goes offline / comes back.
+Blips are filtered (`confirm_seconds`), repeats are rate-limited
+(`cooldown_minutes`), and nothing fires right after a restart
+(`startup_grace_seconds`). Verify the channel with
+`python -m ghmon.main --test-notify`.
+
 ## Notes
 
 - `featured: [metric_key]` on a component spotlights that metric in the
