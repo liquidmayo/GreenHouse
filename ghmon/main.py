@@ -69,7 +69,7 @@ def main():
 
         server_cfg = cfg["server"]
         app = create_app(store, cfg["api_key"], cfg.get("brand", "SYSTEM MONITOR"),
-                         cfg.get("dashboard_password", ""))
+                         cfg.get("dashboard_password", ""), cfg.get("ui", {}))
         log.info("GreenHouse Monitor master dashboard at http://%s:%s/",
                  server_cfg["host"], server_cfg["port"])
         try:

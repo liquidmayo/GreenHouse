@@ -30,6 +30,15 @@ notify:
   cooldown_minutes: 15        # min gap between repeat alerts for one problem
   startup_grace_seconds: 90   # no alerts right after a dashboard restart
 
+# Dashboard presentation. hero_merge combines the same metric key from
+# several components (e.g. across machines) into ONE hero tile showing the
+# total with a per-source breakdown. Click any hero tile for a history
+# graph (5-minute rollups, kept 30 days).
+ui:
+  hero_merge: []
+  # - metric: listeners
+  #   label: "TOTAL LISTENERS"
+
 system:
   disks: ['C:\']              # drives to watch
   disk_warn_pct: 85

@@ -4,8 +4,9 @@
 // the live rdio-scanner + ThinLine listener counts, HomeGrown Alerts style
 // (black background, neon green numbers, status dot).
 //
-// Buttons: BOOT (GPIO0) = brightness levels, KEY (GPIO14) = view cycle
-//          (split -> rdio zoom -> thinline zoom).
+// Buttons: BOOT (GPIO0) = brightness levels
+//          KEY (GPIO14) tap = next view (split -> rdio -> thinline -> calls
+//          -> followers -> viewers); KEY hold ~1s = toggle auto-cycle (8s).
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -42,12 +43,21 @@ int rdioCount = -1;
 int thinlineCount = -1;
 int callsMin = -1;
 int followersTotal = -1;          // total FB followers across pages
+int viewersCount = -1;            // YouTube stream watching-now
 char lastCallTg[48] = "";         // last call talkgroup label
 int lastCallAge = -1;             // seconds, as of lastOkPoll
 char sysStatus[8] = "unk";        // ok | warn | crit
 unsigned long lastOkPoll = 0;     // millis() of last successful poll
 unsigned long lastPollAttempt = 0;
-int viewMode = 0;                 // 0 split, 1 rdio, 2 thinline, 3 calls, 4 followers
+#define VIEW_COUNT 6
+int viewMode = 0;                 // 0 split, 1 rdio, 2 thinline, 3 calls, 4 followers, 5 viewers
+
+// auto-cycle: long-press the view button (~1s) to toggle; while on, views
+// advance every AUTO_CYCLE_MS and a small dot shows in the top bar
+#define AUTO_CYCLE_MS 8000UL
+#define LONG_PRESS_MS 900UL
+bool autoCycle = false;
+unsigned long lastAutoAdvance = 0;
 
 const uint8_t brightLevels[] = {60, 120, 200, 255};
 int brightIdx = 2;
@@ -106,6 +116,10 @@ void drawTopBar(TFT_eSprite &g) {
   g.drawString("HOMEGROWN ALERTS", SCREEN_W / 2, 4, 2);
   // status dot, right
   g.fillSmoothCircle(SCREEN_W - 14, 10, 6, statusColor(), C_BG);
+  // auto-cycle indicator: small ring left of the status dot
+  if (autoCycle) {
+    g.drawSmoothCircle(SCREEN_W - 32, 10, 5, C_GREEN, C_BG);
+  }
 }
 
 void drawStaleBar(TFT_eSprite &g) {
@@ -172,6 +186,12 @@ void drawMain(TFT_eSprite &g) {
     g.setTextDatum(BC_DATUM);
     g.setTextColor(C_MUTED, C_BG);
     g.drawString("FB FOLLOWERS", SCREEN_W / 2, SCREEN_H - 26, 2);
+  } else if (viewMode == 5) {
+    // YouTube stream viewers
+    drawCount(g, viewersCount, SCREEN_W / 2, 78, true);
+    g.setTextDatum(BC_DATUM);
+    g.setTextColor(C_MUTED, C_BG);
+    g.drawString("YOUTUBE VIEWERS", SCREEN_W / 2, SCREEN_H - 26, 2);
   } else {
     int v = (viewMode == 1) ? rdioCount : thinlineCount;
     const char *label = (viewMode == 1) ? "RDIO LISTENERS" : "THINLINE LISTENERS";
@@ -236,6 +256,7 @@ bool pollTicker() {
     filter["calls_min"] = true;
     filter["last_call"] = true;
     filter["followers"] = true;
+    filter["viewers"] = true;
     JsonDocument doc;
     DeserializationError err = deserializeJson(
         doc, http.getStream(), DeserializationOption::Filter(filter));
@@ -244,6 +265,7 @@ bool pollTicker() {
       thinlineCount = doc["thinline"].isNull() ? -1 : doc["thinline"].as<int>();
       callsMin = doc["calls_min"].isNull() ? -1 : doc["calls_min"].as<int>();
       followersTotal = doc["followers"].isNull() ? -1 : doc["followers"].as<int>();
+      viewersCount = doc["viewers"].isNull() ? -1 : doc["viewers"].as<int>();
       if (doc["last_call"].is<JsonObject>()) {
         strlcpy(lastCallTg, doc["last_call"]["talkgroup"] | "", sizeof(lastCallTg));
         lastCallAge = doc["last_call"]["age_s"] | -1;
@@ -275,6 +297,30 @@ bool pressed(uint8_t pin) {
     return true;
   }
   return false;
+}
+
+// Distinguishes a tap from a long hold on the view button.
+// Returns 0 = nothing, 1 = short press (on release), 2 = long press (fires once
+// while still held, so the user gets immediate feedback).
+int viewButtonEvent() {
+  static bool wasDown = false;
+  static unsigned long downAt = 0;
+  static bool longFired = false;
+  bool down = digitalRead(PIN_BTN_VIEW) == LOW;
+  unsigned long now = millis();
+  if (down && !wasDown) {              // press begins
+    wasDown = true; downAt = now; longFired = false;
+    return 0;
+  }
+  if (down && wasDown && !longFired && now - downAt >= LONG_PRESS_MS) {
+    longFired = true;
+    return 2;
+  }
+  if (!down && wasDown) {              // release
+    wasDown = false;
+    if (!longFired && now - downAt > 30) return 1;   // debounce short taps
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------- arduino
@@ -315,8 +361,22 @@ void loop() {
     brightIdx = (brightIdx + 1) % 4;
     setBrightness(brightLevels[brightIdx]);
   }
-  if (pressed(PIN_BTN_VIEW)) {
-    viewMode = (viewMode + 1) % 5;
+  int ev = viewButtonEvent();
+  if (ev == 1) {                       // tap: next view (and pause auto-cycle timer)
+    viewMode = (viewMode + 1) % VIEW_COUNT;
+    lastAutoAdvance = millis();
+    drawMain(spr);
+  } else if (ev == 2) {                // long press: toggle auto-cycle
+    autoCycle = !autoCycle;
+    lastAutoAdvance = millis();
+    drawMessage(autoCycle ? "AUTO CYCLE ON" : "AUTO CYCLE OFF",
+                autoCycle ? "views rotate every 8s" : "hold button to re-enable", C_GREEN);
+    delay(700);
+    drawMain(spr);
+  }
+  if (autoCycle && millis() - lastAutoAdvance >= AUTO_CYCLE_MS) {
+    lastAutoAdvance = millis();
+    viewMode = (viewMode + 1) % VIEW_COUNT;
     drawMain(spr);
   }
 

@@ -292,6 +292,40 @@ body {
 
 .events-empty { padding: 14px; color: var(--dim); }
 
+/* ---------- hero tiles are clickable ---------- */
+#hero .tile { cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease; }
+#hero .tile:hover { border-color: var(--green); transform: translateY(-1px); }
+
+/* ---------- history modal ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(3px);
+}
+.modal.hidden { display: none; }
+.modal-box {
+  width: min(900px, 94vw);
+  background: var(--card-bg);
+  border: 1px solid var(--green-dim);
+  border-radius: 12px;
+  box-shadow: var(--shadow), 0 0 40px rgba(34, 197, 94, 0.12);
+  padding: 14px 18px 12px;
+}
+.modal-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.modal-title { font-weight: 700; letter-spacing: 1.5px; color: var(--green); font-size: 13px; }
+.trend-range { margin-left: auto; display: flex; gap: 4px; }
+.trend-range button, .modal-close {
+  background: transparent; border: 1px solid var(--card-border); color: var(--muted);
+  border-radius: 5px; padding: 3px 9px; font-size: 11px; letter-spacing: 1px; cursor: pointer;
+  font-family: Consolas, monospace;
+}
+.trend-range button.active, .trend-range button:hover { border-color: var(--green); color: var(--green); }
+.modal-close { font-size: 16px; line-height: 1; padding: 1px 8px; }
+.modal-close:hover { color: var(--danger); border-color: var(--danger); }
+#trend-canvas { width: 100%; height: 300px; display: block; }
+.modal-stats { margin-top: 6px; font-family: Consolas, monospace; font-size: 11px; color: var(--muted); text-align: center; }
+
 /* ---------- footer ---------- */
 .footer {
   text-align: center; padding: 10px; font-size: 10px;

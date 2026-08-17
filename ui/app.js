@@ -145,30 +145,162 @@ function renderBanner(machines) {
   }
 }
 
+let uiCfg = {};
+
 function renderHero(machines) {
   const hero = document.getElementById("hero");
+  const merges = (uiCfg.hero_merge || []);
+  const mergedKeys = new Set(merges.map(mg => mg.metric));
+  const mergedTiles = new Map();  // metric -> {label, total, parts:[{src, v}]}
   const tiles = [];
+
   for (const [name, m] of Object.entries(machines)) {
     for (const c of m.components || []) {
       for (const key of c.featured || []) {
         const v = (c.metrics || {})[key];
         const missing = v === undefined || v === null;
-        tiles.push(`
-          <div class="tile ${missing ? "missing" : ""}">
+        if (mergedKeys.has(key)) {
+          const mg = merges.find(x => x.metric === key);
+          if (!mergedTiles.has(key)) {
+            mergedTiles.set(key, {label: mg.label || featuredLabel(key), total: 0, any: false, parts: []});
+          }
+          const t = mergedTiles.get(key);
+          if (!missing) { t.total += Number(v); t.any = true; }
+          t.parts.push({src: name === Object.keys(machines)[0] ? "local" : name.toLowerCase(), v: missing ? "—" : v});
+          continue;
+        }
+        tiles.push({
+          html: `
+          <div class="tile ${missing ? "missing" : ""}" data-machine="${esc(name)}" data-component="${esc(c.id)}" data-metric="${esc(key)}" data-title="${esc(c.label.toUpperCase() + " " + featuredLabel(key))}" title="Click for history">
             <div class="tile-value">${missing ? "—" : esc(String(v))}</div>
             <div class="tile-label">${esc(c.label.toUpperCase())} ${esc(featuredLabel(key))}</div>
             ${missing ? `<div class="tile-note">awaiting credentials in monitors.yml</div>` : ""}
-          </div>`);
+          </div>`,
+          order: 1,
+        });
       }
     }
   }
-  if (tiles.length === 0) {
+  // merged tiles go first — they're the headline aggregates
+  const mergedHtml = [];
+  for (const [key, t] of mergedTiles) {
+    const breakdown = t.parts.length > 1
+      ? `<div class="tile-note">${t.parts.map(p => `${esc(String(p.v))} ${esc(p.src)}`).join(" + ")}</div>` : "";
+    mergedHtml.push(`
+      <div class="tile ${t.any ? "" : "missing"}" data-merged="${esc(key)}" data-title="${esc(t.label)}" title="Click for history">
+        <div class="tile-value">${t.any ? esc(String(t.total)) : "—"}</div>
+        <div class="tile-label">${esc(t.label)}</div>
+        ${breakdown}
+      </div>`);
+  }
+  const all = [...mergedHtml, ...tiles.map(t => t.html)];
+  if (all.length === 0) {
     hero.classList.add("hidden");
   } else {
     hero.classList.remove("hidden");
-    hero.innerHTML = tiles.join("");
+    hero.innerHTML = all.join("");
   }
 }
+
+// ---------- history modal ----------
+let trendCtx = null;   // {title, params, hours}
+
+async function openTrend(el) {
+  const title = el.dataset.title;
+  const params = el.dataset.merged
+    ? {metric: el.dataset.merged, merged: 1}
+    : {machine: el.dataset.machine, component: el.dataset.component, metric: el.dataset.metric};
+  trendCtx = {title, params, hours: 24};
+  document.getElementById("trend-modal").classList.remove("hidden");
+  document.getElementById("trend-title").textContent = title;
+  await loadTrend();
+}
+
+async function loadTrend() {
+  if (!trendCtx) return;
+  const q = new URLSearchParams({...trendCtx.params, hours: trendCtx.hours});
+  document.querySelectorAll(".trend-range button").forEach(b =>
+    b.classList.toggle("active", Number(b.dataset.h) === trendCtx.hours));
+  const el = document.getElementById("trend-stats");
+  el.textContent = "loading…";
+  try {
+    const rows = await (await fetch("/api/trend?" + q)).json();
+    drawTrend(rows);
+    if (rows.length) {
+      const avgs = rows.map(r => r.avg), peaks = rows.map(r => r.peak);
+      const overall = avgs.reduce((a, b) => a + b, 0) / avgs.length;
+      el.textContent = `peak ${Math.max(...peaks)} · avg ${overall.toFixed(1)} · low ${Math.min(...avgs)} · ${rows.length} samples (5-min buckets)`;
+    } else {
+      el.textContent = "no history yet for this range — data accumulates from now on";
+    }
+  } catch (e) {
+    el.textContent = "failed to load history";
+  }
+}
+
+function drawTrend(rows) {
+  const canvas = document.getElementById("trend-canvas");
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  if (!rows.length) return;
+  const padL = 44, padR = 12, padT = 12, padB = 26;
+  const xs = rows.map(r => r.ts), ys = rows.map(r => r.avg), ps = rows.map(r => r.peak);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs) || x0 + 1;
+  const yMax = Math.max(1, ...ps) * 1.1, yMin = 0;
+  const X = t => padL + (t - x0) / Math.max(1, x1 - x0) * (W - padL - padR);
+  const Y = v => H - padB - (v - yMin) / (yMax - yMin) * (H - padT - padB);
+  // grid + y labels
+  ctx.strokeStyle = "rgba(34,197,94,0.12)"; ctx.fillStyle = "#5f7f66";
+  ctx.font = "11px Consolas, monospace"; ctx.textAlign = "right"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const v = yMin + (yMax - yMin) * i / 4, y = Y(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(Math.round(v), padL - 6, y + 4);
+  }
+  // x labels
+  ctx.textAlign = "center";
+  const span = x1 - x0, ticks = 6;
+  for (let i = 0; i <= ticks; i++) {
+    const t = x0 + span * i / ticks, d = new Date(t * 1000);
+    const lbl = span > 2 * 86400 ? d.toLocaleDateString([], {month: "numeric", day: "numeric"})
+                                 : d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", hour12: false});
+    ctx.fillText(lbl, X(t), H - 8);
+  }
+  // peak band
+  ctx.beginPath();
+  rows.forEach((r, i) => { const x = X(r.ts), y = Y(r.peak); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.strokeStyle = "rgba(34,197,94,0.35)"; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+  // avg fill + line
+  ctx.beginPath();
+  rows.forEach((r, i) => { const x = X(r.ts), y = Y(r.avg); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  const last = rows[rows.length - 1];
+  ctx.lineTo(X(last.ts), Y(0)); ctx.lineTo(X(rows[0].ts), Y(0)); ctx.closePath();
+  const grad = ctx.createLinearGradient(0, padT, 0, H - padB);
+  grad.addColorStop(0, "rgba(34,197,94,0.35)"); grad.addColorStop(1, "rgba(34,197,94,0.02)");
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath();
+  rows.forEach((r, i) => { const x = X(r.ts), y = Y(r.avg); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.strokeStyle = "#22c55e"; ctx.lineWidth = 2; ctx.shadowColor = "rgba(34,197,94,0.8)"; ctx.shadowBlur = 8;
+  ctx.stroke(); ctx.shadowBlur = 0;
+}
+
+function closeTrend() {
+  trendCtx = null;
+  document.getElementById("trend-modal").classList.add("hidden");
+}
+
+document.addEventListener("click", e => {
+  const tile = e.target.closest("#hero .tile");
+  if (tile) { openTrend(tile); return; }
+  if (e.target.closest("#trend-close") || e.target.id === "trend-modal") { closeTrend(); return; }
+  const rb = e.target.closest(".trend-range button");
+  if (rb && trendCtx) { trendCtx.hours = Number(rb.dataset.h); loadTrend(); }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeTrend(); });
 
 function renderCalls(calls) {
   const rate = document.getElementById("calls-rate");
@@ -219,7 +351,7 @@ async function refresh() {
       document.getElementById("brand-footer").textContent = data.brand + " — INFRASTRUCTURE MONITOR";
       document.title = data.brand;
     }
-
+    uiCfg = data.ui || {};
     const machines = data.machines || {};
     const container = document.getElementById("machines");
     const names = Object.keys(machines).sort();

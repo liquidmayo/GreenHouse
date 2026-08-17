@@ -55,6 +55,9 @@ Blips are filtered (`confirm_seconds`), repeats are rate-limited
 
 - `featured: [metric_key]` on a component spotlights that metric in the
   hero strip at the top of the dashboard and enlarges it on the card.
+  Click any hero tile for a history graph (6h/24h/7d/30d; 5-minute
+  rollups). `ui.hero_merge` combines one metric across components into a
+  single total tile.
 - `brand:` in `monitors.yml` sets the dashboard title text.
 - History is kept in `data\monitor.db` (48h samples, 7d events, auto-pruned).
 - The ingest API is protected by the shared `api_key`; change the default.

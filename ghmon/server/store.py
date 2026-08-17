@@ -1,4 +1,4 @@
-"""State store for the master dashboard.
+﻿"""State store for the master dashboard.
 
 Latest machine payloads and short status strips live in memory; samples and
 events are persisted to SQLite for history queries, pruned on a rolling window.
@@ -18,6 +18,8 @@ EVENTS_KEPT = 200       # recent events kept in memory for the feed
 CALLS_KEPT = 300        # recent radio calls kept in memory for the call feed
 SAMPLE_RETENTION_H = 48
 EVENT_RETENTION_H = 24 * 7
+TREND_RETENTION_D = 30      # 5-minute rollups of featured metrics kept this long
+TREND_BUCKET_S = 300
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS samples (
@@ -39,6 +41,16 @@ CREATE TABLE IF NOT EXISTS events (
     message TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events (ts);
+CREATE TABLE IF NOT EXISTS trends (
+    machine TEXT NOT NULL,
+    component TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    bucket INTEGER NOT NULL,     -- epoch seconds floored to TREND_BUCKET_S
+    total REAL NOT NULL,
+    n INTEGER NOT NULL,
+    peak REAL NOT NULL,
+    PRIMARY KEY (machine, component, metric, bucket)
+);
 """
 
 
@@ -56,6 +68,43 @@ class Store:
         self._last_prune = 0
         with self._conn() as conn:
             conn.executescript(SCHEMA)
+        self._backfill_trends()
+
+    def _backfill_trends(self):
+        """One-time: if the trends table is empty but raw samples exist,
+        roll the raw history up so graphs aren't blank after the upgrade.
+        Uses a fixed key list because raw samples don't record which
+        metrics were 'featured'."""
+        keys = ("listeners", "listener_count", "followers", "viewers")
+        try:
+            with self._conn() as conn:
+                if conn.execute("SELECT 1 FROM trends LIMIT 1").fetchone():
+                    return
+                rows = conn.execute(
+                    "SELECT machine, component, ts, metrics FROM samples").fetchall()
+                agg = {}
+                for r in rows:
+                    try:
+                        metrics = json.loads(r["metrics"] or "{}")
+                    except ValueError:
+                        continue
+                    bucket = int(r["ts"] // TREND_BUCKET_S * TREND_BUCKET_S)
+                    for k in keys:
+                        v = metrics.get(k)
+                        if isinstance(v, (int, float)):
+                            slot = agg.setdefault((r["machine"], r["component"], k, bucket),
+                                                  [0.0, 0, float("-inf")])
+                            slot[0] += v; slot[1] += 1; slot[2] = max(slot[2], v)
+                if agg:
+                    conn.executemany(
+                        "INSERT OR REPLACE INTO trends "
+                        "(machine, component, metric, bucket, total, n, peak) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [(m, c, k, b, t, n, p) for (m, c, k, b), (t, n, p) in agg.items()])
+                    log.info("backfilled %d trend buckets from %d raw samples",
+                             len(agg), len(rows))
+        except Exception:
+            log.exception("trend backfill failed")
 
     def _conn(self):
         conn = sqlite3.connect(self.db_path, timeout=10)
@@ -66,11 +115,18 @@ class Store:
         machine = payload.get("machine") or "unknown"
         now = time.time()
         rows = []
+        trend_rows = []
         new_events = []
         for comp in payload.get("components", []):
             cid = comp.get("id", "?")
             rows.append((machine, cid, payload.get("ts", now), comp.get("status", "unknown"),
                          json.dumps(comp.get("metrics", {}))))
+            # long-term rollup for the component's spotlight metrics
+            bucket = int(payload.get("ts", now) // TREND_BUCKET_S * TREND_BUCKET_S)
+            for key in list(comp.get("featured", [])) + list(comp.get("featured_card", [])):
+                val = comp.get("metrics", {}).get(key)
+                if isinstance(val, (int, float)):
+                    trend_rows.append((machine, cid, key, bucket, float(val)))
             self.strips[(machine, cid)].append(
                 {"ts": payload.get("ts", now), "s": comp.get("status", "unknown")})
             for ev in comp.get("events", []):
@@ -99,6 +155,13 @@ class Store:
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     [(e["machine"], e["component"], e["ts"], e["level"],
                       e["label"], e["message"]) for e in new_events])
+                conn.executemany(
+                    "INSERT INTO trends (machine, component, metric, bucket, total, n, peak) "
+                    "VALUES (?, ?, ?, ?, ?, 1, ?) "
+                    "ON CONFLICT(machine, component, metric, bucket) DO UPDATE SET "
+                    "total = total + excluded.total, n = n + 1, "
+                    "peak = MAX(peak, excluded.peak)",
+                    [(m, c, k, b, v, v) for (m, c, k, b, v) in trend_rows])
         self._maybe_prune(now)
 
     def _maybe_prune(self, now):
@@ -111,8 +174,33 @@ class Store:
                              (now - SAMPLE_RETENTION_H * 3600,))
                 conn.execute("DELETE FROM events WHERE ts < ?",
                              (now - EVENT_RETENTION_H * 3600,))
+                conn.execute("DELETE FROM trends WHERE bucket < ?",
+                             (now - TREND_RETENTION_D * 86400,))
         except Exception:
             log.exception("prune failed")
+
+    def trend(self, machine, component, metric, hours=24):
+        """5-minute averaged history of one metric: [{ts, avg, peak}, ...]."""
+        since = time.time() - hours * 3600
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT bucket, total, n, peak FROM trends "
+                "WHERE machine = ? AND component = ? AND metric = ? AND bucket > ? "
+                "ORDER BY bucket", (machine, component, metric, since)).fetchall()
+        return [{"ts": r["bucket"], "avg": round(r["total"] / r["n"], 1),
+                 "peak": r["peak"]} for r in rows]
+
+    def trend_merged(self, metric, hours=24):
+        """Same metric summed across all machines/components per bucket
+        (e.g. total rdio listeners local + remote)."""
+        since = time.time() - hours * 3600
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT bucket, SUM(total * 1.0 / n) AS avg, SUM(peak) AS peak "
+                "FROM trends WHERE metric = ? AND bucket > ? "
+                "GROUP BY bucket ORDER BY bucket", (metric, since)).fetchall()
+        return [{"ts": r["bucket"], "avg": round(r["avg"], 1), "peak": r["peak"]}
+                for r in rows]
 
     def note_call(self, payload):
         """Record one radio call pushed by the SDRTrunk webhook broadcaster."""
@@ -163,7 +251,7 @@ class Store:
                 comp["strip"] = list(self.strips[(machine, comp["id"])])
                 if offline:
                     comp["status"] = "unknown"
-                    comp["summary"] = "agent offline — last data %ds ago" % round(age)
+                    comp["summary"] = "agent offline â€” last data %ds ago" % round(age)
                 comps.append(comp)
             machines[machine] = {
                 "received_at": entry["received_at"],

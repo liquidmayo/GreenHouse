@@ -39,6 +39,20 @@
 
   <footer class="footer" id="brand-footer">INFRASTRUCTURE MONITOR</footer>
 
+  <div id="trend-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span id="trend-title" class="modal-title"></span>
+        <span class="trend-range">
+          <button data-h="6">6H</button><button data-h="24" class="active">24H</button><button data-h="168">7D</button><button data-h="720">30D</button>
+        </span>
+        <button id="trend-close" class="modal-close" title="Close (Esc)">&times;</button>
+      </div>
+      <canvas id="trend-canvas"></canvas>
+      <div id="trend-stats" class="modal-stats"></div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

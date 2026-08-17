@@ -45,8 +45,9 @@ LOGIN_PAGE = """<!DOCTYPE html>
 </form></body></html>"""
 
 
-def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
+def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui_cfg=None):
     app = Flask("ghmon", static_folder=None)
+    ui_cfg = ui_cfg or {}
     sessions = set()
 
     def authed():
@@ -119,6 +120,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
         rdio = None
         thinline = None
         followers = None
+        viewers = None
         worst = "ok"
         sev = {"ok": 0, "unknown": 0, "warn": 1, "crit": 2}
         for machine in data.get("machines", {}).values():
@@ -130,6 +132,8 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
                     thinline = (thinline or 0) + metrics["listener_count"]
                 if isinstance(metrics.get("followers"), (int, float)):
                     followers = (followers or 0) + metrics["followers"]
+                if isinstance(metrics.get("viewers"), (int, float)):
+                    viewers = (viewers or 0) + metrics["viewers"]
                 if sev.get(comp.get("status"), 0) > sev[worst]:
                     worst = comp.get("status")
         stats = store.call_stats()
@@ -139,14 +143,27 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password=""):
             last_call = {"talkgroup": last["talkgroup"], "system": last["system"],
                          "age_s": round(data["ts"] - last["ts"])}
         return jsonify({"rdio": rdio, "thinline": thinline,
-                        "followers": followers,
+                        "followers": followers, "viewers": viewers,
                         "status": worst, "ts": data["ts"],
                         "calls_min": stats["last_min"], "last_call": last_call})
+
+    @app.get("/api/trend")
+    def trend():
+        """5-minute rollup history of a spotlight metric.
+        ?machine=X&component=Y&metric=Z&hours=24, or ?metric=Z&merged=1
+        to sum the metric across every machine/component."""
+        metric = request.args.get("metric", "")
+        hours = min(float(request.args.get("hours", 24)), 24 * 30)
+        if request.args.get("merged"):
+            return jsonify(store.trend_merged(metric, hours))
+        return jsonify(store.trend(request.args.get("machine", ""),
+                                   request.args.get("component", ""), metric, hours))
 
     @app.get("/api/state")
     def state():
         data = store.state()
         data["brand"] = brand
+        data["ui"] = ui_cfg
         return jsonify(data)
 
     @app.get("/api/history")
