@@ -1,4 +1,4 @@
-﻿"""State store for the master dashboard.
+"""State store for the master dashboard.
 
 Latest machine payloads and short status strips live in memory; samples and
 events are persisted to SQLite for history queries, pruned on a rolling window.
@@ -251,7 +251,7 @@ class Store:
                 comp["strip"] = list(self.strips[(machine, comp["id"])])
                 if offline:
                     comp["status"] = "unknown"
-                    comp["summary"] = "agent offline â€” last data %ds ago" % round(age)
+                    comp["summary"] = "agent offline — last data %ds ago" % round(age)
                 comps.append(comp)
             machines[machine] = {
                 "received_at": entry["received_at"],

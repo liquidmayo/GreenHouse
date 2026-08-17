@@ -41,6 +41,24 @@ One codebase, two roles:
 | `rdio_admin` | rdio-scanner admin API: listener count, call-ingest rate, API errors |
 | `youtube_live` | YouTube livestream: live/offline + watching-now count (no API key) |
 
+## Start on boot
+
+```
+powershell -ExecutionPolicy Bypass -File install-autostart.ps1          # master
+powershell -ExecutionPolicy Bypass -File install-autostart.ps1 -Agent   # companion agent
+```
+
+Registers a Scheduled Task that launches the monitor hidden 30 seconds
+after logon (`-Remove` uninstalls it).
+
+## Auto-restart
+
+A component can declare `on_crit: {run: ..., after_seconds: 120,
+max_per_hour: 2}` to relaunch a service you own once it has been CRIT for
+a while. It is rate-limited, never fires on WARN, and every attempt (or a
+refused attempt at the hourly cap) is logged and pushed to your alert
+channel. Don't hook things whose failures need a human.
+
 ## Alerts
 
 Set `notify.discord_webhook` (and/or a generic `notify.webhook`) in

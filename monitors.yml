@@ -52,6 +52,15 @@ system:
 # card number without a hero tile. `hero_only: true` on a component
 # renders its hero tile(s) but no card in the machine grid.
 #
+# Optional auto-restart for services you own (opt-in, rate-limited,
+# every attempt logged and notified). Never runs on WARN — only after the
+# component has been CRIT for `after_seconds`:
+#   on_crit:
+#     run: 'D:\myservice\start.bat'     # launched detached, hidden by default
+#     after_seconds: 120
+#     max_per_hour: 2                    # then it stops and says "needs a human"
+#     cooldown_seconds: 300
+#
 # Probe reference (all fields shown; most are optional):
 #
 #   - type: process              # is a process running?

@@ -1,4 +1,4 @@
-﻿"""Status-transition notifier: watches the store and pushes alerts when a
+"""Status-transition notifier: watches the store and pushes alerts when a
 component crosses into an alertable state (or recovers), or when a remote
 agent goes offline / comes back.
 
@@ -6,7 +6,7 @@ Rules (all configurable in monitors.yml `notify:`):
   - `min_severity` (default crit): only crit transitions alert; set warn to
     include warns. Recovery notices are sent for anything previously alerted.
   - `confirm_seconds` (default 45): a bad state must persist this long
-    before alerting â€” filters one-cycle blips.
+    before alerting — filters one-cycle blips.
   - `offline_grace_seconds` (default 300): a machine must be silent this
     long before an offline alert (internet blips on remote agents are common).
   - `cooldown_minutes` (default 15): per-key minimum gap between repeat
@@ -18,6 +18,7 @@ Rules (all configurable in monitors.yml `notify:`):
 Channels: `discord_webhook` (embeds), `webhook` (generic JSON POST).
 Notification failures are logged, never raised.
 """
+import collections
 import logging
 import threading
 import time
@@ -43,6 +44,7 @@ class Notifier:
         self.started = time.time()
         # key -> {"since": ts bad state began, "alerted": bool, "last_sent": ts, "level": str}
         self.tracked = {}
+        self._seen_events = collections.deque(maxlen=200)
         self._stop = threading.Event()
 
     # ------------------------------------------------------------ evaluation
@@ -80,6 +82,21 @@ class Notifier:
             if key not in seen:
                 del self.tracked[key]
 
+        # Auto-restart activity is always worth knowing about, regardless of
+        # min_severity: relay new "Auto-restart ..." events once each.
+        for ev in state.get("events", [])[:30]:
+            if not str(ev.get("label", "")).startswith("Auto-restart"):
+                continue
+            key = ("evt", ev.get("machine"), ev.get("component"), ev.get("ts"))
+            if key in self._seen_events:
+                continue
+            self._seen_events.append(key)
+            if now - self.started < self.startup_grace:
+                continue  # replayed events from before a restart
+            level = "crit" if "failed" in ev["label"].lower() or "limit" in ev["label"].lower() else "warn"
+            self._send(level, f"{ev.get('machine')} / {ev.get('component_label', ev.get('component'))}: {ev['label']}",
+                       ev.get("message", ""))
+
     def _track(self, key, now, bad, level, title, detail, recover_title, confirm):
         t = self.tracked.get(key)
         if bad:
@@ -106,12 +123,12 @@ class Notifier:
     def _send(self, level, title, detail):
         if not self.enabled:
             return
-        log.info("notify [%s] %s â€” %s", level, title, detail)
+        log.info("notify [%s] %s — %s", level, title, detail)
         payload = {"level": level, "title": title, "detail": detail,
                    "ts": time.time(), "source": "greenhouse-monitor"}
         dw = self.cfg.get("discord_webhook")
         if dw:
-            icon = {"crit": "ðŸ”´", "warn": "ðŸŸ¡", "ok": "ðŸŸ¢", "offline": "âš«"}.get(level, "âšª")
+            icon = {"crit": "🔴", "warn": "🟡", "ok": "🟢", "offline": "⚫"}.get(level, "⚪")
             embed = {
                 "title": f"{icon} {title}",
                 "description": detail[:1500] if detail else "",

@@ -14,6 +14,7 @@ import requests
 from . import __version__
 from .probes import build_probe
 from .probes.base import worst
+from .recover import Recovery
 
 log = logging.getLogger("ghmon.agent")
 
@@ -26,6 +27,7 @@ class Component:
         self.featured_card = cfg.get("featured_card", [])  # big card number only
         self.hero_only = bool(cfg.get("hero_only", False))  # hero tile, no card
         self.probes = [build_probe(p) for p in cfg.get("probes", [])]
+        self.recovery = Recovery(cfg.get("on_crit"))
 
     def collect(self):
         metrics = {}
@@ -40,6 +42,7 @@ class Component:
             if res["summary"] and res["status"] != "ok":
                 summaries.append(res["summary"])
         status = worst(statuses) if statuses else "unknown"
+        events.extend(self.recovery.observe(status, self.label))
         summary = "; ".join(summaries) if summaries else (
             "All checks passing" if status == "ok" else "")
         return {
