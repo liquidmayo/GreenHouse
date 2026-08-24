@@ -1,0 +1,28 @@
+// HGA Listener Counter (AMOLED) — device configuration.
+// Copy this file to config.h (same folder) and fill in your values.
+// config.h is git-ignored so credentials never leave this machine.
+#pragma once
+
+// WiFi network the display connects to (2.4 GHz only)
+#define WIFI_SSID     "your-ssid"
+#define WIFI_PASS     "your-password"
+
+// The HGA Monitor master's ticker endpoint
+#define TICKER_URL    "http://192.168.1.100:8090/api/ticker"
+
+// Must match api_key in the master's monitors.yml
+#define API_KEY       "change-me"
+
+// Seconds between polls
+#define POLL_SECONDS  10
+
+// --- AMOLED brightness & burn-in care -------------------------------
+// Daytime brightness (0-255). Running below max meaningfully extends
+// panel life; 170 is bright indoors. BOOT button cycles day levels.
+#define BRIGHT_DAY    170
+// Night brightness (0-255), applied between NIGHT_START and NIGHT_END.
+#define BRIGHT_NIGHT  40
+#define NIGHT_START   23     // hour 0-23, local time
+#define NIGHT_END     7      // hour 0-23, local time
+// POSIX TZ string for local time via NTP (default: US Eastern with DST)
+#define TZ_STRING     "EST5EDT,M3.2.0,M11.1.0"

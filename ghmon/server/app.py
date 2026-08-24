@@ -142,10 +142,21 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
         if last:
             last_call = {"talkgroup": last["talkgroup"], "system": last["system"],
                          "age_s": round(data["ts"] - last["ts"])}
+        # compact listener-trend sparkline for embedded displays: ~24 points
+        # of merged listener averages over the last 6 hours
+        spark = None
+        try:
+            pts = store.trend_merged("listeners", 6)
+            if pts:
+                step = max(1, len(pts) // 24)
+                spark = [round(p["avg"]) for p in pts[::step]][-24:]
+        except Exception:
+            log.exception("ticker spark failed")
         return jsonify({"rdio": rdio, "thinline": thinline,
                         "followers": followers, "viewers": viewers,
                         "status": worst, "ts": data["ts"],
-                        "calls_min": stats["last_min"], "last_call": last_call})
+                        "calls_min": stats["last_min"], "last_call": last_call,
+                        "spark": spark})
 
     @app.get("/api/trend")
     def trend():
