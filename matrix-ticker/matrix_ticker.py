@@ -210,7 +210,7 @@ def marquee(draw, s, f, y, scroll, fill):
         draw.text(((W - tw) // 2, y), s, font=f, fill=fill)
         return
     span = tw + 40
-    x = -(scroll % span)
+    x = -int(scroll % span)   # scroll_px may be fractional
     draw.text((x + 2, y), s, font=f, fill=fill)
     draw.text((x + 2 + span, y), s, font=f, fill=fill)
 

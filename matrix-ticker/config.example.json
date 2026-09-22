@@ -17,6 +17,7 @@
     "topic": "homegrown/alerts",
     "alert_seconds": 20,
     "flash_count": 3,
-    "dedupe_seconds": 60
+    "dedupe_seconds": 60,
+    "scroll_px": 4.5
   }
 }
