@@ -103,13 +103,16 @@ def parse_alert(payload):
     try:
         d = json.loads(payload)
         if isinstance(d, dict):
+            # twotoneproject payloads: description = department/station,
+            # transcription = the dispatch audio text (address etc.)
             for k in ("department", "dept", "agency", "name", "title",
-                      "tone", "label", "alert"):
+                      "tone", "label", "alert", "description"):
                 if d.get(k):
                     primary = str(d[k])
                     break
-            for k in ("description", "message", "text", "detail", "details",
-                      "channel", "system", "county"):
+            for k in ("transcription", "message", "text", "detail",
+                      "details", "description", "channel", "system",
+                      "county"):
                 if d.get(k) and str(d[k]) != primary:
                     secondary = str(d[k])
                     break
@@ -240,6 +243,20 @@ def page_audience(draw, st):
     draw.text((W - 4 - text_w(draw, n, F_MED), 40), n, font=F_MED, fill=GREEN)
 
 
+def marquee_pass_seconds(text, f):
+    """Seconds for one full marquee cycle of `text`, 0 if it fits statically.
+    Scroll advances 2px per ~0.05s frame; pad 15% for frame-time drift."""
+    if not text:
+        return 0
+    img = Image.new("RGB", (1, 1))
+    d = ImageDraw.Draw(img)
+    d.fontmode = "1"
+    tw = d.textbbox((0, 0), text, font=f)[2]
+    if tw <= W - 4:
+        return 0
+    return (tw + 40) / (2 / 0.05) * 1.15
+
+
 def page_alert(draw, alert, scroll):
     draw.text((2, 1), "TONE OUT", font=F_SMALL, fill=RED)
     primary = alert["primary"]
@@ -256,9 +273,10 @@ def page_alert(draw, alert, scroll):
         marquee(draw, primary, font(16), 18, scroll, YELLOW)
     if alert.get("secondary"):
         sec = alert["secondary"]
+        # transcription line in the medium font — it carries the address;
         # bottom-anchor by measured height so descenders stay on-panel
-        y = H - draw.textbbox((0, 0), sec, font=F_SMALL)[3] - 1
-        marquee(draw, sec, F_SMALL, y, scroll, MUTED)
+        y = H - draw.textbbox((0, 0), sec, font=F_MED)[3] - 1
+        marquee(draw, sec, F_MED, y, scroll, GREEN)
 
 
 # ------------------------------------------------------------------ main
@@ -290,6 +308,7 @@ def main():
     last_bright_check = 0.0
     current_alert = None
     alert_started = 0.0
+    current_hold = alert_hold
 
     while True:
         now = time.time()
@@ -301,6 +320,11 @@ def main():
                     current_alert = alerts.popleft()
                     alert_started = now
                     scroll = 0
+                    # adaptive hold: never cut off a scrolling transcription
+                    current_hold = max(
+                        alert_hold,
+                        marquee_pass_seconds(current_alert.get("secondary"), F_MED) + 1,
+                        marquee_pass_seconds(current_alert.get("primary"), font(16)) + 1)
                     # alerts override night dimming
                     matrix.brightness = CFG.get(
                         "brightness_alert", CFG.get("brightness_day", 60))
@@ -316,7 +340,7 @@ def main():
                 canvas = matrix.SwapOnVSync(canvas)
                 time.sleep(0.05)
                 continue
-            if el < flash_window + alert_hold:     # alert page
+            if el < flash_window + current_hold:   # alert page (adaptive)
                 img, draw = new_frame()
                 page_alert(draw, current_alert, scroll)
                 scroll += 2
