@@ -1,0 +1,22 @@
+{
+  "ticker_url": "http://MASTER-IP:8090/api/ticker",
+  "api_key": "change-me",
+  "poll_seconds": 10,
+  "rotate_seconds": 8,
+  "brightness_day": 60,
+  "brightness_night": 20,
+  "night_start": 23,
+  "night_end": 7,
+  "gpio_slowdown": 1,
+  "hardware_mapping": "regular",
+  "mqtt": {
+    "host": "",
+    "port": 1883,
+    "username": "",
+    "password": "",
+    "topic": "homegrown/alerts",
+    "alert_seconds": 20,
+    "flash_count": 3,
+    "dedupe_seconds": 60
+  }
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=HGA Matrix Ticker (LED matrix stats display)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/homegrown/hga-matrix
+ExecStart=/home/homegrown/hga-matrix/venv/bin/python3 /home/homegrown/hga-matrix/matrix_ticker.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
