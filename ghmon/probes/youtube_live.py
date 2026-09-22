@@ -6,7 +6,10 @@ probe-level `every:` throttle.
 
 Config:
   type: youtube_live
-  video_id: X_0Y5F592uA        # or a full url: https://www.youtube.com/watch?v=...
+  channel: "@SomeChannel"      # PREFERRED: follows the channel's /live URL, so
+                               # a restarted stream (new video id) needs no edit
+  # video_id: X_0Y5F592uA      # or pin a specific video
+  # url: https://...           # or a full url
   every: 60                    # scrape at most once a minute
   offline_level: warn          # component status when the stream is not live
   timeout: 15
@@ -29,6 +32,9 @@ class YoutubeLiveProbe(Probe):
     def run(self):
         cfg = self.cfg
         url = cfg.get("url")
+        if not url and cfg.get("channel"):
+            handle = cfg["channel"].lstrip("@")
+            url = f"https://www.youtube.com/@{handle}/live"
         if not url:
             url = f"https://www.youtube.com/watch?v={cfg['video_id']}"
         try:
@@ -44,7 +50,14 @@ class YoutubeLiveProbe(Probe):
         page = resp.text
         live_match = RE_LIVE.search(page)
         if not live_match:
-            # Page layout changed or a consent/blocked page was served —
+            # On a channel /live URL, a valid page without the live marker
+            # means the channel simply is not streaming right now.
+            if cfg.get("channel") and "ytInitialData" in page:
+                level = cfg.get("offline_level", "warn")
+                return result(level, "channel is not live", {"live": 0},
+                              [event(level, "YouTube stream offline",
+                                     cfg["channel"])])
+            # Otherwise: layout changed or a consent/blocked page was served —
             # don't guess, and don't alarm on our own parsing failure.
             return result("unknown", "could not parse live status",
                           events=[event("warn", "YouTube parse failure",

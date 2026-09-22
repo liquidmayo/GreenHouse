@@ -59,7 +59,8 @@ PAGES = 3
 # ---- live ticker state (poll thread writes, render loop reads) ----
 state = {
     "rdio": None, "thinline": None, "viewers": None, "followers": None,
-    "calls_min": None, "tg": "", "tg_age": None, "status": "unk",
+    "fb_pages": [], "calls_min": None, "tg": "", "tg_age": None,
+    "status": "unk",
 }
 last_ok = 0.0
 lock = threading.Lock()
@@ -84,6 +85,7 @@ def poll_loop():
                     state["thinline"] = d.get("thinline")
                     state["viewers"] = d.get("viewers")
                     state["followers"] = d.get("followers")
+                    state["fb_pages"] = d.get("followers_pages") or []
                     state["calls_min"] = d.get("calls_min")
                     lc = d.get("last_call") or {}
                     state["tg"] = lc.get("talkgroup") or ""
@@ -185,8 +187,7 @@ def is_night():
 def fmt(v):
     if v is None:
         return "--"
-    v = int(v)
-    return f"{v/1000:.1f}k" if v >= 10000 else str(v)
+    return str(int(v))   # always the full number
 
 
 def text_w(draw, s, f):
@@ -233,14 +234,46 @@ def page_calls(draw, st, scroll):
     marquee(draw, st["tg"] or "no recent calls", F_MED, 42, scroll, GREEN)
 
 
-def page_audience(draw, st):
-    draw.text((2, 2), "YT VIEWERS", font=F_SMALL, fill=MUTED)
+def page_youtube(draw, st):
+    draw.text((2, 2), "YOUTUBE", font=F_SMALL, fill=MUTED)
     n = fmt(st["viewers"])
-    draw.text((W - 4 - text_w(draw, n, F_BIG), 0), n, font=F_BIG, fill=GREEN)
-    draw.line((4, 32, W - 5, 32), fill=GREEN_DIM)
-    draw.text((2, 36), "FB FOLLOWERS", font=F_SMALL, fill=MUTED)
-    n = fmt(st["followers"])
-    draw.text((W - 4 - text_w(draw, n, F_MED), 40), n, font=F_MED, fill=GREEN)
+    tw = text_w(draw, n, F_BIG)
+    draw.text(((W - tw) // 2, 16), n, font=F_BIG, fill=GREEN)
+    lbl = "WATCHING NOW"
+    draw.text(((W - text_w(draw, lbl, F_SMALL)) // 2, 52), lbl,
+              font=F_SMALL, fill=MUTED)
+
+
+def page_fb(draw, name, count):
+    """Single FB panel (used for the TOTAL): name + full count."""
+    draw.text((2, 2), "FB FOLLOWERS", font=F_SMALL, fill=MUTED)
+    nm = name.upper()
+    f_name = F_MED if text_w(draw, nm, F_MED) <= W - 4 else F_SMALL
+    draw.text(((W - text_w(draw, nm, f_name)) // 2, 14), nm,
+              font=f_name, fill=YELLOW)
+    n = fmt(count)
+    tw = text_w(draw, n, F_BIG)
+    draw.text(((W - tw) // 2, 34), n, font=F_BIG, fill=GREEN)
+
+
+def fb_row(draw, y, name, count):
+    """Half-height row: page name left, full count right, size-adaptive."""
+    nm = name.upper()
+    n = fmt(count)
+    f_num = F_BIG if (text_w(draw, nm, F_SMALL) +
+                      text_w(draw, n, F_BIG) + 10 <= W - 6) else F_MED
+    draw.text((2, y + 11), nm, font=F_SMALL, fill=MUTED)
+    h = draw.textbbox((0, 0), n, font=f_num)[3]
+    draw.text((W - 4 - text_w(draw, n, f_num), y + (32 - h) // 2),
+              n, font=f_num, fill=GREEN)
+
+
+def page_fb_group(draw, group):
+    """Two FB pages on one panel, split top/bottom like the listeners page."""
+    fb_row(draw, 0, group[0].get("name", "?"), group[0].get("count"))
+    if len(group) > 1:
+        draw.line((4, 32, W - 5, 32), fill=GREEN_DIM)
+        fb_row(draw, 32, group[1].get("name", "?"), group[1].get("count"))
 
 
 def marquee_pass_seconds(text, f, px_per_frame=2):
@@ -303,6 +336,7 @@ def main():
     flash_window = flash_cycles * 0.6              # 0.3s on / 0.3s off
     alert_hold = mcfg.get("alert_seconds", 20)
 
+    # rotation: 0 listeners, 1 calls, 2 youtube, 3 fb total, 4.. fb pages
     page = 0
     page_since = time.time()
     scroll = 0
@@ -357,8 +391,13 @@ def main():
             last_bright_check = 0.0                # re-evaluate night dim
 
         # ---- normal rotation ----
+        with lock:
+            n_fb = len(state["fb_pages"])
+        pages_total = 4 + (n_fb + 1) // 2   # FB pages grouped two per panel
+        if page >= pages_total:
+            page = 0
         if now - page_since >= CFG.get("rotate_seconds", 8):
-            page = (page + 1) % PAGES
+            page = (page + 1) % pages_total
             page_since = now
             scroll = 0
 
@@ -376,8 +415,14 @@ def main():
         elif page == 1:
             page_calls(draw, st, scroll)
             scroll += 2
+        elif page == 2:
+            page_youtube(draw, st)
+        elif page == 3:
+            page_fb(draw, "TOTAL", st["followers"])
         else:
-            page_audience(draw, st)
+            i = (page - 4) * 2
+            group = st["fb_pages"][i:i + 2] or [{"name": "?", "count": None}]
+            page_fb_group(draw, group)
         draw_dot(draw, st["status"])
         if last_ok == 0 or now - last_ok > STALE_S:
             draw.rectangle((0, H - 10, 44, H - 1), fill=(0, 0, 0))

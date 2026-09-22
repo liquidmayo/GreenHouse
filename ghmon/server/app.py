@@ -120,6 +120,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
         rdio = None
         thinline = None
         followers = None
+        followers_pages = []
         viewers = None
         worst = "ok"
         sev = {"ok": 0, "unknown": 0, "warn": 1, "crit": 2}
@@ -132,6 +133,11 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
                     thinline = (thinline or 0) + metrics["listener_count"]
                 if isinstance(metrics.get("followers"), (int, float)):
                     followers = (followers or 0) + metrics["followers"]
+                    name = comp.get("label", comp.get("id", ""))
+                    if name.upper().startswith("FB "):
+                        name = name[3:]
+                    followers_pages.append(
+                        {"name": name, "count": int(metrics["followers"])})
                 if isinstance(metrics.get("viewers"), (int, float)):
                     viewers = (viewers or 0) + metrics["viewers"]
                 if sev.get(comp.get("status"), 0) > sev[worst]:
@@ -154,6 +160,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
             log.exception("ticker spark failed")
         return jsonify({"rdio": rdio, "thinline": thinline,
                         "followers": followers, "viewers": viewers,
+                        "followers_pages": followers_pages,
                         "status": worst, "ts": data["ts"],
                         "calls_min": stats["last_min"], "last_call": last_call,
                         "spark": spark})
