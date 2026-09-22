@@ -243,9 +243,9 @@ def page_audience(draw, st):
     draw.text((W - 4 - text_w(draw, n, F_MED), 40), n, font=F_MED, fill=GREEN)
 
 
-def marquee_pass_seconds(text, f):
+def marquee_pass_seconds(text, f, px_per_frame=2):
     """Seconds for one full marquee cycle of `text`, 0 if it fits statically.
-    Scroll advances 2px per ~0.05s frame; pad 15% for frame-time drift."""
+    Scroll advances px_per_frame per ~0.05s frame; pad 15% for drift."""
     if not text:
         return 0
     img = Image.new("RGB", (1, 1))
@@ -254,7 +254,7 @@ def marquee_pass_seconds(text, f):
     tw = d.textbbox((0, 0), text, font=f)[2]
     if tw <= W - 4:
         return 0
-    return (tw + 40) / (2 / 0.05) * 1.15
+    return (tw + 40) / (px_per_frame / 0.05) * 1.15
 
 
 def page_alert(draw, alert, scroll):
@@ -298,6 +298,7 @@ def main():
     threading.Thread(target=mqtt_loop, daemon=True).start()
 
     mcfg = CFG.get("mqtt") or {}
+    alert_scroll_px = mcfg.get("scroll_px", 3)   # alert marquee speed
     flash_cycles = mcfg.get("flash_count", 3)
     flash_window = flash_cycles * 0.6              # 0.3s on / 0.3s off
     alert_hold = mcfg.get("alert_seconds", 20)
@@ -323,8 +324,10 @@ def main():
                     # adaptive hold: never cut off a scrolling transcription
                     current_hold = max(
                         alert_hold,
-                        marquee_pass_seconds(current_alert.get("secondary"), F_MED) + 1,
-                        marquee_pass_seconds(current_alert.get("primary"), font(16)) + 1)
+                        marquee_pass_seconds(current_alert.get("secondary"),
+                                             F_MED, alert_scroll_px) + 1,
+                        marquee_pass_seconds(current_alert.get("primary"),
+                                             font(16), alert_scroll_px) + 1)
                     # alerts override night dimming
                     matrix.brightness = CFG.get(
                         "brightness_alert", CFG.get("brightness_day", 60))
@@ -343,7 +346,7 @@ def main():
             if el < flash_window + current_hold:   # alert page (adaptive)
                 img, draw = new_frame()
                 page_alert(draw, current_alert, scroll)
-                scroll += 2
+                scroll += alert_scroll_px
                 canvas.SetImage(img)
                 canvas = matrix.SwapOnVSync(canvas)
                 time.sleep(0.05)
