@@ -17,7 +17,8 @@
     "topic": "homegrown/alerts",
     "alert_seconds": 20,
     "flash_count": 3,
-    "dedupe_seconds": 60,
-    "scroll_px": 4.5
-  }
+    "dedupe_seconds": 60
+  },
+  "night_clock_only": false,
+  "self_heal": true
 }

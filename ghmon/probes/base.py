@@ -32,12 +32,21 @@ class Probe:
     Any probe may set `every: <seconds>` in its config to run at most that
     often — between runs the last result is returned (useful for heavy or
     rate-limited targets).
+
+    Any probe may set `hold_metrics: <seconds>`: when a run yields no
+    metrics (upstream failure), the last successfully collected metrics are
+    carried forward for up to that long, so displays fed from the metrics
+    (hero tiles, ticker, matrix) keep the last known value instead of
+    blanking. The probe's status/summary still reflect the failure; the
+    summary is tagged with the held value's age.
     """
 
     def __init__(self, cfg):
         self.cfg = cfg
         self._last_run = 0.0
         self._last_result = None
+        self._held_metrics = None
+        self._held_ts = 0.0
 
     def run(self):
         raise NotImplementedError
@@ -56,6 +65,17 @@ class Probe:
                 events=[event("warn", "Probe error", f"{self.cfg.get('type')}: {exc}")],
             )
         self._last_run = now
+        hold = self.cfg.get("hold_metrics")
+        if hold:
+            if res.get("metrics"):
+                self._held_metrics = dict(res["metrics"])
+                self._held_ts = now
+            elif self._held_metrics and now - self._held_ts <= hold:
+                age_min = int((now - self._held_ts) // 60)
+                res = dict(res)
+                res["metrics"] = dict(self._held_metrics)
+                suffix = f" (holding last value, {age_min}m old)"
+                res["summary"] = (res.get("summary") or "").rstrip() + suffix
         self._last_result = res
         return res
 

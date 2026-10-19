@@ -7,6 +7,7 @@ reporting is unaffected.
 import logging
 import os
 import secrets
+import time
 
 from flask import Flask, jsonify, make_response, redirect, request, send_from_directory
 
@@ -45,10 +46,64 @@ LOGIN_PAGE = """<!DOCTYPE html>
 </form></body></html>"""
 
 
-def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui_cfg=None):
+def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="",
+               ui_cfg=None, stale_cfg=None):
     app = Flask("ghmon", static_folder=None)
     ui_cfg = ui_cfg or {}
+    stale_cfg = stale_cfg or []
     sessions = set()
+    _stale_cache = {"ts": 0.0, "flags": {}}
+
+    def stale_flags():
+        """(machine, component) -> note, for watched metrics whose value has
+        been flat for the rule's whole window — a silently stale upstream
+        source (e.g. a scraper serving the same cached count for days).
+        Evaluated from the trends DB so restarts don't reset the clock."""
+        import fnmatch
+        now = time.time()
+        if now - _stale_cache["ts"] < 600:
+            return _stale_cache["flags"]
+        flags = {}
+        data = {}
+        try:
+            data = store.state()
+            for rule in stale_cfg:
+                metric = rule.get("metric", "")
+                days = float(rule.get("days", 5))
+                for mname, machine in data.get("machines", {}).items():
+                    for comp in machine.get("components", []):
+                        cid = comp.get("id", "")
+                        if not fnmatch.fnmatch(cid, rule.get("component", "*")):
+                            continue
+                        pts = store.trend(mname, cid, metric, days * 24)
+                        # need most of the window on record before judging
+                        if len(pts) < days * 24 * 12 * 0.6:
+                            continue
+                        vals = {p["avg"] for p in pts}
+                        if len(vals) == 1:
+                            flags[(mname, cid)] = (
+                                f"{metric} unchanged for {days:g}+ days — "
+                                "source likely stale")
+        except Exception:
+            log.exception("stale check failed")
+        # don't cache a cold-start evaluation: right after launch the first
+        # ticker poll can land before the local agent's first ingest, and an
+        # empty machine list must not pin "no flags" for the cache window
+        if data.get("machines"):
+            _stale_cache["ts"] = now
+            _stale_cache["flags"] = flags
+        return flags
+
+    def apply_stale(data):
+        for (mname, cid), note in stale_flags().items():
+            for comp in data.get("machines", {}).get(mname, {}) \
+                            .get("components", []):
+                if comp.get("id") == cid:
+                    if comp.get("status") in ("ok", "unknown"):
+                        comp["status"] = "warn"
+                    comp["summary"] = (comp.get("summary", "") +
+                                       " | " + note).strip(" |")
+        return data
 
     def authed():
         return request.cookies.get(SESSION_COOKIE) in sessions
@@ -58,8 +113,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
         if not dashboard_password:
             return None
         # these carry their own API-key auth
-        if request.path in ("/api/ingest", "/api/ticker",
-                            "/api/webhook/sdrtrunk", "/login"):
+        if request.path in ("/api/ingest", "/api/ticker", "/login"):
             return None
         if authed():
             return None
@@ -95,36 +149,36 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
         store.ingest(payload)
         return jsonify({"ok": True})
 
-    @app.post("/api/webhook/sdrtrunk")
-    def sdrtrunk_webhook():
-        """Per-call push from SDRTrunk's Local Webhook (JSON) broadcaster.
-        The stream's Authorization field should be set to the shared api_key."""
-        supplied = (request.headers.get("Authorization")
-                    or request.headers.get("X-API-Key")
-                    or request.args.get("key") or "")
-        if not secrets.compare_digest(supplied, api_key):
-            return jsonify({"ok": False, "error": "bad authorization"}), 401
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            return jsonify({"ok": False, "error": "bad payload"}), 400
-        store.note_call(payload)
-        return jsonify({"ok": True})
-
     @app.get("/api/ticker")
     def ticker():
         """Compact listener-count feed for embedded displays (T-Display etc.)."""
         supplied = request.headers.get("X-API-Key") or request.args.get("key") or ""
         if not secrets.compare_digest(supplied, api_key):
             return jsonify({"ok": False, "error": "bad api key"}), 401
-        data = store.state()
+        data = apply_stale(store.state())
         rdio = None
         thinline = None
         followers = None
         followers_pages = []
         viewers = None
+        nws = []
         worst = "ok"
+        worst_label = None
         sev = {"ok": 0, "unknown": 0, "warn": 1, "crit": 2}
-        for machine in data.get("machines", {}).values():
+
+        def since_midnight_delta(mname, cid, metric, current):
+            """Metric gain since local midnight, from the 5-min trend rollups."""
+            try:
+                lt = time.localtime()
+                hours = lt.tm_hour + lt.tm_min / 60 + 0.1
+                pts = store.trend(mname, cid, metric, hours)
+                if pts:
+                    return int(round(current - pts[0]["avg"]))
+            except Exception:
+                log.exception("ticker delta failed")
+            return None
+
+        for mname, machine in data.get("machines", {}).items():
             for comp in machine.get("components", []):
                 metrics = comp.get("metrics", {})
                 if isinstance(metrics.get("listeners"), (int, float)):
@@ -137,17 +191,17 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
                     if name.upper().startswith("FB "):
                         name = name[3:]
                     followers_pages.append(
-                        {"name": name, "count": int(metrics["followers"])})
+                        {"name": name, "count": int(metrics["followers"]),
+                         "delta": since_midnight_delta(
+                             mname, comp.get("id", ""), "followers",
+                             metrics["followers"])})
                 if isinstance(metrics.get("viewers"), (int, float)):
                     viewers = (viewers or 0) + metrics["viewers"]
+                if isinstance(metrics.get("nws_list"), list):
+                    nws = nws + metrics["nws_list"]
                 if sev.get(comp.get("status"), 0) > sev[worst]:
                     worst = comp.get("status")
-        stats = store.call_stats()
-        last = stats["recent"][0] if stats["recent"] else None
-        last_call = None
-        if last:
-            last_call = {"talkgroup": last["talkgroup"], "system": last["system"],
-                         "age_s": round(data["ts"] - last["ts"])}
+                    worst_label = comp.get("label", comp.get("id", ""))
         # compact listener-trend sparkline for embedded displays: ~24 points
         # of merged listener averages over the last 6 hours
         spark = None
@@ -161,8 +215,11 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
         return jsonify({"rdio": rdio, "thinline": thinline,
                         "followers": followers, "viewers": viewers,
                         "followers_pages": followers_pages,
-                        "status": worst, "ts": data["ts"],
-                        "calls_min": stats["last_min"], "last_call": last_call,
+                        "nws": nws,
+                        "status": worst,
+                        "worst_label": (worst_label
+                                        if worst in ("warn", "crit") else None),
+                        "ts": data["ts"],
                         "spark": spark})
 
     @app.get("/api/trend")
@@ -179,7 +236,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="", ui
 
     @app.get("/api/state")
     def state():
-        data = store.state()
+        data = apply_stale(store.state())
         data["brand"] = brand
         data["ui"] = ui_cfg
         return jsonify(data)

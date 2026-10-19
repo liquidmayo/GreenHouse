@@ -3,3 +3,4 @@ waitress>=3.0
 requests>=2.31
 psutil>=5.9
 PyYAML>=6.0
+playwright            # optional: only for the fb_public probe (then: python -m playwright install chromium)

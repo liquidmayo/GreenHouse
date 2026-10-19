@@ -302,25 +302,6 @@ document.addEventListener("click", e => {
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeTrend(); });
 
-function renderCalls(calls) {
-  const rate = document.getElementById("calls-rate");
-  const el = document.getElementById("calls");
-  if (!calls || !calls.recent || calls.recent.length === 0) {
-    rate.textContent = "";
-    el.innerHTML = `<div class="events-empty">No calls received — configure the SDRTrunk webhook stream to feed this panel.</div>`;
-    return;
-  }
-  rate.textContent = `· ${calls.last_min}/min · ${calls.last_hour}/hr · last ${fmtAge(calls.last_call_age_s)} ago`;
-  el.innerHTML = calls.recent.map(c => `
-    <div class="event-row">
-      <span class="event-ts">${fmtTs(c.ts)}</span>
-      <span class="call-sys">${esc(c.system || "?")}</span>
-      <span class="call-tg">${esc(c.talkgroup || "?")}</span>
-      <span class="event-msg">${esc(c.radio || "")}</span>
-      <span class="call-dur">${c.duration_s != null ? Number(c.duration_s).toFixed(1) + "s" : ""}</span>
-    </div>`).join("");
-}
-
 function renderEvents(events) {
   const el = document.getElementById("events");
   if (!events || events.length === 0) {
@@ -360,7 +341,6 @@ async function refresh() {
     }
     renderBanner(machines);
     renderHero(machines);
-    renderCalls(data.calls);
   } catch (err) {
     failures++;
     if (failures >= 2) {

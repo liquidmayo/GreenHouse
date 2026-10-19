@@ -6,8 +6,14 @@ from .logtail import LogTailProbe
 from .file_activity import FileActivityProbe
 from .rdio_admin import RdioAdminProbe
 from .youtube_live import YoutubeLiveProbe
+from .nws_alerts import NwsAlertsProbe
+from .fb_graph import FbGraphProbe
+from .fb_public import FbPublicProbe
 
 PROBE_TYPES = {
+    "nws_alerts": NwsAlertsProbe,
+    "fb_graph": FbGraphProbe,
+    "fb_public": FbPublicProbe,
     "http_json": HttpJsonProbe,
     "port": PortProbe,
     "process": ProcessProbe,

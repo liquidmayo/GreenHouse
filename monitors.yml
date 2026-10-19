@@ -119,9 +119,39 @@ system:
 #     every: 60                  # watch page is ~1 MB; fetch at most 1/min
 #     offline_level: warn        # status when the stream is not live
 #
+#   - type: fb_graph             # Facebook Page followers (official Graph API,
+#     page_id: "1234567890"      # for pages you admin; exact counts)
+#     access_token: "EAAG..."    # page access token
+#     every: 300
+#
+#   - type: fb_public            # follower count scraped from the PUBLIC page
+#     page: SomePageName         # via headless Chromium (pip install playwright
+#     every: 900                 # && python -m playwright install chromium);
+#     hold_metrics: 21600        # for pages you cannot get a Graph token for
+#
+#   - type: nws_alerts           # NWS watches/warnings (api.weather.gov)
+#     area: OH                   # state code
+#     counties: [Mercer, Darke]  # county names to match; [] = whole state
+#     every: 120
+#     level_when_active: ok      # or warn to color the card
+#     # forwarded to embedded displays via the ticker's `nws` list
+#
 # Any probe accepts `every: <seconds>` to run at most that often
-# (last result is reused between runs).
+# (last result is reused between runs), and `hold_metrics: <seconds>`
+# to keep serving the last successfully collected metrics for up to
+# that long when the target fails (status still reflects the failure;
+# the summary is tagged with the held value's age). Useful for flaky
+# third-party APIs feeding hero tiles or the ticker.
 # ----------------------------------------------------------------------
+
+# Flag a watched metric as WARN when its value has been flat for the whole
+# window — catches an upstream source silently serving a stale cached value.
+# Evaluated from the trends DB, so restarts don't reset the clock.
+#
+# stale_watch:
+#   - component: "fb-*"          # component id glob
+#     metric: followers
+#     days: 5
 
 components: []
 
