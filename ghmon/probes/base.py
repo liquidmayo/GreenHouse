@@ -14,13 +14,17 @@ def result(status="ok", summary="", metrics=None, events=None):
     }
 
 
-def event(level, label, message=""):
-    return {
+def event(level, label, message="", flash=False):
+    ev = {
         "ts": time.time(),
         "level": level,
         "label": label,
         "message": (message or "")[:400],
     }
+    if flash:
+        # flash events are forwarded to embedded displays (matrix break-in)
+        ev["flash"] = True
+    return ev
 
 
 class Probe:

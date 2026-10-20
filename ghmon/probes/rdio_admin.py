@@ -12,6 +12,15 @@ Config:
   url: http://127.0.0.1:3000
   password: ""              # admin password; blank disables the probe
   max_call_silence: 900     # warn if no successful 'newcall' in this window
+  log_patterns:             # optional regex alerts over the admin log entries
+    - regex: "(?i)sqlite"
+      level: crit
+      label: "SQLite error"
+      flash: true           # also break in on embedded displays (matrix)
+
+Pattern matching keeps a per-pattern high-water timestamp so only entries
+NEWER than the last run alert (the probe refetches the same recent window
+every cycle); the first run after startup only arms the mark.
 """
 import re
 import time
@@ -45,6 +54,15 @@ class RdioAdminProbe(Probe):
     def __init__(self, cfg):
         super().__init__(cfg)
         self._token = None
+        self._patterns = []
+        for p in cfg.get("log_patterns", []):
+            self._patterns.append({
+                "re": re.compile(p["regex"]),
+                "level": p.get("level", "warn"),
+                "label": p.get("label", p["regex"]),
+                "flash": bool(p.get("flash")),
+                "hwm": None,     # newest already-reported entry ts (epoch ms)
+            })
 
     def _login(self, base):
         resp = requests.post(f"{base}/api/admin/login",
@@ -89,8 +107,12 @@ class RdioAdminProbe(Probe):
         newest_call_ms = None
         api_errors = 0
         listeners = None
+        pattern_hits = {id(p): [] for p in self._patterns}
         for entry in logs:
             msg = str(entry.get("message", ""))
+            for p in self._patterns:
+                if p["re"].search(msg):
+                    pattern_hits[id(p)].append((entry_ts_ms(entry) or now_ms, msg))
             if "newcall" in msg and "success" in msg:
                 ts = entry_ts_ms(entry)
                 if ts is not None and (newest_call_ms is None or ts > newest_call_ms):
@@ -120,5 +142,23 @@ class RdioAdminProbe(Probe):
                 summaries.append(f"no calls ingested for {silence}s")
                 status = "warn"
                 events_out.append(event("warn", "Call ingest silent", f"last successful newcall {silence}s ago"))
+
+        sev = {"ok": 0, "unknown": 0, "warn": 1, "crit": 2}
+        for p in self._patterns:
+            hits = pattern_hits[id(p)]
+            newest = max((ts for ts, _ in hits), default=None)
+            if p["hwm"] is None:
+                # first run: arm on current history, don't re-alert old entries
+                p["hwm"] = newest or now_ms
+                continue
+            fresh = [(ts, m) for ts, m in hits if ts > p["hwm"]]
+            if not fresh:
+                continue
+            p["hwm"] = max(ts for ts, _ in fresh)
+            summaries.append(f"{p['label']}: {len(fresh)} new in log")
+            if sev.get(p["level"], 1) > sev.get(status, 0):
+                status = p["level"]
+            events_out.append(event(p["level"], p["label"],
+                                    fresh[-1][1], flash=p["flash"]))
 
         return result(status, "; ".join(summaries), metrics, events_out)

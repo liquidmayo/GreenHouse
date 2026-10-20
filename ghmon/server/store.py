@@ -138,6 +138,7 @@ class Store:
                     "component_label": comp.get("label", cid),
                     "ts": ev.get("ts", now), "level": ev.get("level", "warn"),
                     "label": ev.get("label", ""), "message": ev.get("message", ""),
+                    "flash": bool(ev.get("flash")),
                 }
                 new_events.append(item)
                 self.recent_events.appendleft(item)

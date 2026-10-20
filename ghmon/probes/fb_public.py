@@ -10,7 +10,7 @@ A run costs a few seconds of headless browser, so poll gently and pair with
 hold_metrics:
 
     - type: fb_public
-      page: HomeGrownToneAlerts
+      page: SomePublicPage
       every: 900
       timeout: 30
       level_if_down: unknown
@@ -20,9 +20,22 @@ Only an exact comma-grouped number is accepted — if Facebook serves a
 rounded "60K" (or a login wall), the probe reports no metric rather than a
 wrong one, and hold_metrics carries the last good count.
 """
+import os
 import re
 
 from .base import Probe, result
+
+# Browsers live inside the project, NOT the default %LOCALAPPDATA% — installs
+# run from an MSIX-packaged shell (e.g. the Claude desktop app) get their
+# AppData virtualized into the app's package overlay, invisible to normally
+# launched processes (logon task, keepalive). A plain D:\ path is seen
+# identically by every context. Install with:
+#   set PLAYWRIGHT_BROWSERS_PATH=<root>\pw-browsers
+#   python -m playwright install chromium
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_BROWSERS = os.path.join(_ROOT, "pw-browsers")
+if os.path.isdir(_BROWSERS):
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", _BROWSERS)
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")

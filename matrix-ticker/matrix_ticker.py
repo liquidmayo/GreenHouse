@@ -78,7 +78,8 @@ STALE_S = 60
 # ---- live ticker state (poll thread writes, render loop reads) ----
 state = {
     "rdio": None, "thinline": None, "viewers": None, "followers": None,
-    "fb_pages": [], "spark": [], "worst": None, "nws": [], "status": "unk",
+    "fb_pages": [], "spark": [], "worst": None, "nws": [], "flash": [],
+    "status": "unk",
 }
 last_ok = 0.0
 lock = threading.Lock()
@@ -110,6 +111,40 @@ try:
     _nws_seen = json.load(open(NWS_SEEN_FILE))
 except Exception:
     _nws_seen = {}
+
+
+# infra flash alerts from the dashboard (probe events flagged flash: true,
+# e.g. an rdio-scanner SQLite error) — same persisted-seen-id pattern as NWS
+FLASH_SEEN_FILE = os.path.join(HERE, "flash_seen.json")
+try:
+    _flash_seen = json.load(open(FLASH_SEEN_FILE))
+except Exception:
+    _flash_seen = {}
+
+
+def handle_flash_breakins(items):
+    now = time.time()
+    changed = False
+    for a in items:
+        aid = a.get("id")
+        if not aid or aid in _flash_seen:
+            continue
+        _flash_seen[aid] = now
+        changed = True
+        alert = {"primary": a.get("label", "SYSTEM ALERT"),
+                 "secondary": a.get("message") or a.get("source", ""),
+                 "kind": "infra", "ts": now}
+        with alert_lock:
+            alerts.append(alert)
+        print(f"INFRA flash break-in: {alert['primary']}", flush=True)
+    if changed:
+        for aid, ts in list(_flash_seen.items()):   # prune after 48h
+            if now - ts > 48 * 3600:
+                del _flash_seen[aid]
+        try:
+            json.dump(_flash_seen, open(FLASH_SEEN_FILE, "w"))
+        except Exception as exc:
+            print(f"flash_seen save failed: {exc}", flush=True)
 
 
 def handle_nws_breakins(nws):
@@ -201,10 +236,12 @@ def poll_loop():
                     state["spark"] = d.get("spark") or []
                     state["worst"] = d.get("worst_label")
                     state["nws"] = d.get("nws") or []
+                    state["flash"] = d.get("flash") or []
                     state["status"] = d.get("status") or "unk"
                 last_ok = time.time()
                 _heal["kicked"] = 0.0
                 handle_nws_breakins(d.get("nws") or [])
+                handle_flash_breakins(d.get("flash") or [])
         except Exception as exc:
             print(f"poll error: {exc}", flush=True)
         self_heal_check()
@@ -618,7 +655,8 @@ def marquee_pass_seconds(text, f, px_per_frame=2):
 
 
 def page_alert(draw, alert, scroll):
-    hdr = "NWS WARNING" if alert.get("kind") == "nws" else "TONE OUT"
+    hdr = {"nws": "NWS WARNING",
+           "infra": "SYSTEM ALERT"}.get(alert.get("kind"), "TONE OUT")
     draw.text((2, 1), hdr, font=F_SMALL, fill=RED)
     primary = alert["primary"]
     f = fit_font(draw, primary, (26, 20, 16, 13))

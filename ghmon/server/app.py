@@ -202,6 +202,24 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="",
                 if sev.get(comp.get("status"), 0) > sev[worst]:
                     worst = comp.get("status")
                     worst_label = comp.get("label", comp.get("id", ""))
+        # flash events: probe events flagged for display break-in (matrix) —
+        # recent ones only; the display dedupes by id across polls
+        flash = []
+        try:
+            now = time.time()
+            for e in list(store.recent_events):
+                if e.get("flash") and now - e["ts"] <= 900:
+                    flash.append({
+                        "id": f"{e['machine']}/{e['component']}/"
+                              f"{e['label']}/{int(e['ts'])}",
+                        "label": e["label"], "message": e["message"],
+                        "level": e["level"],
+                        "source": e.get("component_label", e["component"]),
+                        "ts": e["ts"]})
+                if len(flash) >= 5:
+                    break
+        except Exception:
+            log.exception("ticker flash failed")
         # compact listener-trend sparkline for embedded displays: ~24 points
         # of merged listener averages over the last 6 hours
         spark = None
@@ -220,6 +238,7 @@ def create_app(store, api_key, brand="SYSTEM MONITOR", dashboard_password="",
                         "worst_label": (worst_label
                                         if worst in ("warn", "crit") else None),
                         "ts": data["ts"],
+                        "flash": flash,
                         "spark": spark})
 
     @app.get("/api/trend")
